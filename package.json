@@ -1,1 +1,9 @@
-{ "name": "habysst", "private": true, "type": "module", "scripts": { "test": "node --test" } }
+{
+  "name": "habysst",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/logic.test.js",
+    "test:e2e": "node test/e2e/datos.cjs"
+  }
+}

@@ -20,6 +20,9 @@ const esc = s => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const setOf = h => (state.done[h.id] ??= new Set());
 const cap = s => s[0].toUpperCase() + s.slice(1);
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+// `label` is HTML: escape user text before passing it.
+const radio = (name, value, label, on = false) =>
+  `<label class="opt"><input type="radio" name="${name}" value="${value}"${on ? ' checked' : ''}><span>${label}</span></label>`;
 
 // Per-render cache of each habit's periods, streaks and drawn days.
 let cache = new Map();
@@ -326,7 +329,6 @@ function logGoal(id) {
 function openGoalEditor(g) {
   const kind = g?.kind ?? 'number';
   const val = x => (x ? esc(String(x)) : '');
-  const radio = (v, label) => `<label class="opt"><input type="radio" name="kind" value="${v}"${kind === v ? ' checked' : ''}><span>${label}</span></label>`;
   $sheet.redraw = null;
   $sheet.innerHTML = `<form id="geditor">
     <h2${g ? ' tabindex="-1" autofocus' : ''}>${g ? 'Editar meta' : 'Nueva meta'}</h2>
@@ -335,7 +337,7 @@ function openGoalEditor(g) {
     <label class="field">Por qué te importa<textarea name="why" rows="2" maxlength="500" placeholder="Opcional">${val(g?.why)}</textarea></label>
     <label class="field">Fecha límite<input name="deadline" type="date" value="${g?.deadline ?? ''}"></label>
     <fieldset class="freq"><legend>Cómo se mide</legend>
-      <div class="opts">${radio('number', 'Con un número')}${radio('steps', 'Con pasos')}</div>
+      <div class="opts">${radio('kind', 'number', 'Con un número', kind === 'number')}${radio('kind', 'steps', 'Con pasos', kind === 'steps')}</div>
       <div class="when-number nums">
         <label class="field">Valor inicial<input name="start" type="number" step="any" inputmode="decimal" value="${g?.start ?? 0}"></label>
         <label class="field">Objetivo<input name="target" type="number" step="any" inputmode="decimal" value="${g && g.kind === 'number' ? g.target : ''}"></label>
@@ -871,15 +873,13 @@ document.addEventListener('visibilitychange', () => { wakeLock = null; if (docum
 
 function openFocusSetup() {
   const goals = activeGoals();
-  const opt = (v, label, on) => `<label class="opt"><input type="radio" name="target" value="${v}"${on ? ' checked' : ''}><span>${label}</span></label>`;
   $sheet.redraw = null;
   $sheet.innerHTML = `<form id="focusf">
     <h2>Sesión de enfoque</h2>
     <fieldset><legend>Duración</legend><div class="opts">
-      ${opt('pomo', 'Pomodoro: 25 minutos y descansos', true)}${opt(25, '25 minutos')}${opt(50, '50 minutos')}${opt(90, '90 minutos')}${opt('', 'Sin límite')}</div></fieldset>
+      ${radio('target', 'pomo', 'Pomodoro: 25 minutos y descansos', true)}${radio('target', 25, '25 minutos')}${radio('target', 50, '50 minutos')}${radio('target', 90, '90 minutos')}${radio('target', '', 'Sin límite')}</div></fieldset>
     ${goals.length ? `<fieldset><legend>¿Para qué meta?</legend><div class="opts">
-      <label class="opt"><input type="radio" name="goal" value="" checked><span>Ninguna en concreto</span></label>
-      ${goals.map(g => `<label class="opt"><input type="radio" name="goal" value="${g.id}"><span>${esc(g.title)}</span></label>`).join('')}</div></fieldset>` : ''}
+      ${radio('goal', '', 'Ninguna en concreto', true)}${goals.map(g => radio('goal', g.id, esc(g.title))).join('')}</div></fieldset>` : ''}
     <div class="row"><button class="btn">Empezar</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
   </form>`;
   $sheet.querySelector('#focusf').onsubmit = e => {
@@ -1243,13 +1243,12 @@ function openEditor(h) {
   const fq = h?.freq ?? { type: 'daily' };
   const days = fq.type === 'days' ? fq.days : [0, 1, 2, 3, 4];
   const times = fq.type === 'weekly' ? fq.times : 3;
-  const radio = (v, label) => `<label class="opt"><input type="radio" name="ftype" value="${v}"${fq.type === v ? ' checked' : ''}><span>${label}</span></label>`;
   $sheet.redraw = null;
   $sheet.innerHTML = `<form id="editor">
     <h2${h ? ' tabindex="-1" autofocus' : ''}>${h ? 'Editar hábito' : 'Nuevo hábito'}</h2>
     <label class="field">Nombre<input name="name" required maxlength="60" value="${h ? esc(h.name) : ''}" placeholder="Leer 20 minutos" autocomplete="off"></label>
     <fieldset class="freq"><legend>Frecuencia</legend>
-      <div class="opts">${radio('daily', 'Diario')}${radio('days', 'Días concretos')}${radio('weekly', 'Veces por semana')}</div>
+      <div class="opts">${radio('ftype', 'daily', 'Diario', fq.type === 'daily')}${radio('ftype', 'days', 'Días concretos', fq.type === 'days')}${radio('ftype', 'weekly', 'Veces por semana', fq.type === 'weekly')}</div>
       <div class="when-days weekdays" role="group" aria-label="Días">${WD.map((d, i) => `<label><input type="checkbox" name="days" value="${i}"${days.includes(i) ? ' checked' : ''}><span>${d}</span></label>`).join('')}</div>
       <label class="when-weekly field inline">Veces por semana<input type="number" name="times" min="1" max="6" value="${times}" inputmode="numeric"></label>
     </fieldset>
@@ -1609,7 +1608,10 @@ async function restoreSnapshot(key, at) {
 // Another open tab saved: take its data instead of overwriting it with ours.
 addEventListener('storage', e => {
   if (e.key !== 'habysst' || !e.newValue) return;
-  try { state = fromJSON(JSON.parse(e.newValue)); render(); } catch { /* the other tab wrote something unreadable: keep ours */ }
+  try { state = fromJSON(JSON.parse(e.newValue)); } catch { return; } // the other tab wrote something unreadable: keep ours
+  // An open editor points at the old data; closing it saves typed journal text into the new data instead.
+  if ($sheet.open) { $sheet.close(); alert('Tus datos se actualizaron desde otra pestaña. Vuelve a abrir lo que estabas editando.'); }
+  render();
 });
 // Leaving the app (switching apps, locking the phone) writes any text still waiting to be saved.
 addEventListener('pagehide', () => pendingFlush?.());
