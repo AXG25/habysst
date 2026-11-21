@@ -1,4 +1,4 @@
-import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress, mondayOf, weekStats, reviewWeek, sleepMins, mean, compareDays, advancePomodoro } from './logic.js';
+import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress, mondayOf, weekStats, keyFor, periodOf, reviewPeriod, sleepMins, mean, compareDays, advancePomodoro } from './logic.js';
 import { load, save, fromJSON, toJSON, cleanFreq, cleanGoal, cleanEntry, cleanReview, REVIEW_QS, TONES } from './store.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -243,7 +243,7 @@ const ifThen = (a, b) => (a || b ? `<p class="plan">Si ${esc(a || '…')}, enton
 
 function viewMetas() {
   const act = activeGoals(), closed = state.goals.filter(g => g.status !== 'active');
-  return header('Metas', `${act.length} de ${MAX_GOALS} activas`) +
+  return header('Metas', `${act.length} de ${MAX_GOALS} activas`) + compassBox() +
     (act.length
       ? `<ul class="goals">${act.map((g, i) => {
           const s = goalSummary(g);
@@ -323,6 +323,7 @@ function openGoalEditor(g) {
   $sheet.redraw = null;
   $sheet.innerHTML = `<form id="geditor">
     <h2${g ? ' tabindex="-1" autofocus' : ''}>${g ? 'Editar meta' : 'Nueva meta'}</h2>
+    ${state.compass.values.length ? `<p class="muted small">Tus valores: ${state.compass.values.map(esc).join(', ')}.</p>` : ''}
     <label class="field">Meta<input name="title" required maxlength="80" value="${val(g?.title)}" placeholder="Correr una media maratón" autocomplete="off"></label>
     <label class="field">Por qué te importa<textarea name="why" rows="2" maxlength="500" placeholder="Opcional">${val(g?.why)}</textarea></label>
     <label class="field">Fecha límite<input name="deadline" type="date" value="${g?.deadline ?? ''}"></label>
@@ -497,7 +498,9 @@ function viewDiario() {
   const n = Object.keys(state.journal).length;
   return header('Diario', plural(n, 'entrada', 'entradas')) + `
     <div class="row stack"><button class="btn" data-act="entry" data-d="${ymd(new Date())}">${entryOf(ymd(new Date())) ? 'Seguir con la entrada de hoy' : 'Escribir la entrada de hoy'}</button>
-    <button class="btn ghost" data-act="review" data-d="${ymd(reviewWeek(new Date()))}">Revisión de la semana</button></div>
+    </div>
+    <h2 class="sub">Revisar</h2>
+    <div class="seg review-seg" role="group" aria-label="Revisar">${['week', 'month', 'quarter', 'year'].map(k => `<button data-act="review" data-d="${reviewPeriod(k, new Date()).key}">${cap(PERIOD[k].name)}</button>`).join('')}</div>
     ${reviewList()}
     <label class="field search">Buscar en el diario<input type="search" id="jsearch" placeholder="Palabra o frase" autocomplete="off"></label>
     <div id="entries">${entryCards('')}</div>
@@ -516,71 +519,88 @@ document.addEventListener('input', e => {
   if (e.target.id === 'jsearch') document.getElementById('entries').innerHTML = entryCards(e.target.value);
 });
 
-// ---- Weekly review
-const Q_LABELS = {
-  worked: '¿Qué funcionó esta semana?',
-  didnt: '¿Qué no funcionó y por qué?',
-  change: '¿Qué vas a cambiar la próxima semana?',
-  focus: 'Tu prioridad principal para la próxima semana',
+// ---- Reviews: week, month, quarter, year
+const PERIOD = {
+  week: { this: 'esta semana', next: 'la próxima semana', prev: 'Semana anterior', name: 'semana' },
+  month: { this: 'este mes', next: 'el próximo mes', prev: 'Mes anterior', name: 'mes' },
+  quarter: { this: 'este trimestre', next: 'el próximo trimestre', prev: 'Trimestre anterior', name: 'trimestre' },
+  year: { this: 'este año', next: 'el próximo año', prev: 'Año anterior', name: 'año' },
 };
+const qsFor = kind => (kind === 'week' ? REVIEW_QS.filter(q => q !== 'vision') : REVIEW_QS);
+const qLabel = (q, kind) => ({
+  worked: `¿Qué funcionó ${PERIOD[kind].this}?`,
+  didnt: '¿Qué no funcionó y por qué?',
+  change: `¿Qué vas a cambiar ${PERIOD[kind].next}?`,
+  focus: `Tu prioridad principal para ${PERIOD[kind].next}`,
+  vision: '¿Lo que hiciste te acerca a tu visión y a tus valores?',
+})[q];
+function periodLabel(p) {
+  const d = parseYmd(p.from);
+  if (p.kind === 'week') return weekLabel(d);
+  if (p.kind === 'month') return `${cap(MONTHS[d.getMonth()])} de ${d.getFullYear()}`;
+  if (p.kind === 'quarter') return `Trimestre ${Math.floor(d.getMonth() / 3) + 1} de ${d.getFullYear()}`;
+  return `Año ${d.getFullYear()}`;
+}
+const daysIn = (from, to) => { const out = []; for (let d = parseYmd(from); ymd(d) <= to; d = addDays(d, 1)) out.push(ymd(d)); return out; };
 const dm = d => `${d.getDate()} de ${MONTHS[d.getMonth()]}`;
 function weekLabel(mon) {
   const sun = addDays(mon, 6);
   return mon.getMonth() === sun.getMonth() ? `Semana del ${mon.getDate()} al ${dm(sun)}` : `Semana del ${dm(mon)} al ${dm(sun)}`;
 }
 
-function avgOf(kind, mon) {
-  const vals = Array.from({ length: 7 }, (_, i) => state.journal[ymd(addDays(mon, i))]?.[kind]).filter(Boolean);
-  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-}
+const avgOf = (kind, from, to) => mean(daysIn(from, to).map(k => state.journal[k]?.[kind]).filter(Boolean));
 
-function reviewData(mon) {
-  const now = new Date(), prev = addDays(mon, -7);
+function reviewData(p) {
+  const now = new Date(), prev = periodOf(p.prev), P = PERIOD[p.kind];
   const habits = state.habits.map(h => {
-    const w = weekStats(h.freq, setOf(h), mon, now), p = weekStats(h.freq, setOf(h), prev, now);
-    return `<li><i class="sw t${h.tone}"></i><span>${esc(h.name)}</span><b>${w.done}/${w.due}</b>
-      <small>Semana anterior: ${p.done}/${p.due}</small></li>`;
+    if (p.kind === 'week') {
+      const w = weekStats(h.freq, setOf(h), parseYmd(p.from), now), q = weekStats(h.freq, setOf(h), parseYmd(prev.from), now);
+      return `<li><i class="sw t${h.tone}"></i><span>${esc(h.name)}</span><b>${w.done}/${w.due}</b><small>${P.prev}: ${q.done}/${q.due}</small></li>`;
+    }
+    const r = rate(h, p.from, p.to), q = rate(h, prev.from, prev.to);
+    return r === null ? '' : `<li><i class="sw t${h.tone}"></i><span>${esc(h.name)}</span><b>${r}%</b><small>${P.prev}: ${q === null ? 'sin datos' : `${q}%`}</small></li>`;
   }).join('');
   const feel = ['mood', 'energy'].map(k => {
-    const a = avgOf(k, mon), b = avgOf(k, prev);
+    const a = avgOf(k, p.from, p.to), b = avgOf(k, prev.from, prev.to);
     if (a === null) return '';
-    const delta = b === null ? '' : ` (semana anterior: ${fmt(Math.round(b * 10) / 10)})`;
-    return `<li><span>${k === 'mood' ? 'Ánimo medio' : 'Energía media'}</span><b>${fmt(Math.round(a * 10) / 10)} de 5</b><small>${LEVELS[Math.round(a) - 1]}${delta}</small></li>`;
+    return `<li><span>${k === 'mood' ? 'Ánimo medio' : 'Energía media'}</span><b>${fmt1(a)} de 5</b><small>${LEVELS[Math.round(a) - 1]}${b === null ? '' : ` (${P.prev.toLowerCase()}: ${fmt1(b)})`}</small></li>`;
   }).join('');
-  const sun = ymd(addDays(mon, 6)), monKey = ymd(mon);
-  const goals = activeGoals().map(g => {
+  const sl = mean(daysIn(p.from, p.to).map(sleepOf).filter(v => v !== null));
+  const goals = state.goals.filter(g => g.status === 'active' || (g.closedAt && g.closedAt >= p.from && g.closedAt <= p.to)).map(g => {
     const s = goalSummary(g);
-    let moved = '';
-    if (g.kind === 'number') {
-      const before = [...g.log].reverse().find(e => e.d < monKey)?.v ?? g.start;
-      const after = [...g.log].reverse().find(e => e.d <= sun)?.v ?? g.start;
-      moved = before === after ? 'Sin cambios esta semana.' : `Esta semana: de ${fmt(before)} a ${fmt(after)}${u(g)}.`;
+    let moved = g.status === 'done' ? 'Lograda en este periodo.' : g.status === 'dropped' ? 'Abandonada en este periodo.' : '';
+    if (!moved && g.kind === 'number') {
+      const before = [...g.log].reverse().find(e => e.d < p.from)?.v ?? g.start;
+      const after = [...g.log].reverse().find(e => e.d <= p.to)?.v ?? g.start;
+      moved = before === after ? `Sin cambios ${P.this}.` : `${cap(P.this)}: de ${fmt(before)} a ${fmt(after)}${u(g)}.`;
     }
-    return `<li><span>${esc(g.title)}</span><b>${s.pctLabel}</b><small>${[moved, s.pace].filter(Boolean).join(' ')}</small></li>`;
+    return `<li><span>${esc(g.title)}</span><b>${s.pctLabel}</b><small>${[moved, g.status === 'active' ? s.pace : ''].filter(Boolean).join(' ')}</small></li>`;
   }).join('');
-  const entries = Array.from({ length: 7 }, (_, i) => state.journal[ymd(addDays(mon, i))]).filter(Boolean).length;
-  const fw = focusIn(monKey, sun), fp = focusIn(ymd(prev), ymd(addDays(prev, 6)));
-  return `${habits ? `<h3>Hábitos</h3><ul class="legend data">${habits}</ul>` : ''}
-    ${feel ? `<h3>Cómo estuviste</h3><ul class="legend data">${feel}</ul>` : ''}
+  const entries = daysIn(p.from, p.to).filter(k => state.journal[k]).length;
+  const fw = focusIn(p.from, p.to), fp = focusIn(prev.from, prev.to);
+  const c = state.compass;
+  return `${p.kind !== 'week' && (c.values.length || c.vision) ? `<h3>Tu brújula</h3>${compassView()}` : ''}
+    ${habits ? `<h3>Hábitos</h3><ul class="legend data">${habits}</ul>` : ''}
+    ${feel ? `<h3>Cómo estuviste</h3><ul class="legend data">${feel}${sl ? `<li><span>Sueño medio</span><b>${dur(Math.round(sl))}</b></li>` : ''}</ul>` : ''}
     ${goals ? `<h3>Metas</h3><ul class="legend data">${goals}</ul>` : ''}
-    ${fw || fp ? `<h3>Enfoque</h3><ul class="legend data"><li><span>Tiempo de enfoque</span><b>${fw ? dur(fw) : '0 h'}</b><small>Semana anterior: ${fp ? dur(fp) : '0 h'}</small></li></ul>` : ''}
+    ${fw || fp ? `<h3>Enfoque</h3><ul class="legend data"><li><span>Tiempo de enfoque</span><b>${fw ? dur(fw) : '0 min'}</b><small>${P.prev}: ${fp ? dur(fp) : '0 min'}</small></li></ul>` : ''}
     <p class="muted">${plural(entries, 'día', 'días')} con entrada en el diario.</p>`;
 }
 
 function openReview(key) {
-  const mon = parseYmd(key);
+  const p = periodOf(key), qs = qsFor(p.kind);
   const r = state.reviews[key] ?? { answers: {}, doneAt: null };
   $sheet.redraw = null;
   $sheet.innerHTML = `<form method="dialog" id="review" class="entry">
-    <h2 tabindex="-1" autofocus>${weekLabel(mon)}</h2>
-    ${reviewData(mon)}
+    <h2 tabindex="-1" autofocus>${periodLabel(p)}</h2>
+    ${reviewData(p)}
     <h3>Tu revisión</h3>
-    ${REVIEW_QS.map(q => `<label class="field">${Q_LABELS[q]}<textarea name="${q}" rows="${q === 'focus' ? 1 : 3}" maxlength="2000">${esc(r.answers[q] ?? '')}</textarea></label>`).join('')}
+    ${qs.map(q => `<label class="field">${qLabel(q, p.kind)}<textarea name="${q}" rows="${q === 'focus' ? 1 : 3}" maxlength="2000">${esc(r.answers[q] ?? '')}</textarea></label>`).join('')}
     <p class="muted saved" aria-live="polite">Se guarda mientras escribes.</p>
     <div class="row">${r.doneAt ? `<button class="btn">Listo</button>` : `<button type="button" class="btn" data-act="review-done" data-d="${key}">Terminar revisión</button><button class="btn ghost">Seguir luego</button>`}</div>
   </form>`;
   const write = f => {
-    const next = cleanReview({ answers: Object.fromEntries(REVIEW_QS.map(q => [q, f.get(q)])), doneAt: state.reviews[key]?.doneAt });
+    const next = cleanReview({ answers: Object.fromEntries(qs.map(q => [q, f.get(q)])), doneAt: state.reviews[key]?.doneAt });
     if (next) state.reviews[key] = next;
     else delete state.reviews[key];
   };
@@ -596,19 +616,26 @@ function finishReview(key) {
   stamp('Revisada');
 }
 
+const pendingName = p => { const d = parseYmd(p.from); return { week: 'de la semana', month: `de ${MONTHS[d.getMonth()]}`, quarter: 'del trimestre', year: `del año ${d.getFullYear()}` }[p.kind]; };
+// Days after a period ends during which Hoy reminds you to review it.
+const GRACE = { week: 2, month: 3, quarter: 7, year: 10 };
 function reviewNotice(now) {
-  const key = ymd(reviewWeek(now));
-  const pending = [0, 1, 2].includes(now.getDay()) && !state.reviews[key]?.doneAt && (state.habits.length || state.goals.length);
-  const focus = state.reviews[ymd(addDays(mondayOf(now), -7))]?.answers.focus;
-  return (focus ? `<section class="focus panel"><span class="hmeta">Prioridad de esta semana</span><strong>${esc(focus)}</strong></section>` : '') +
-    (pending ? `<button class="note" data-act="review" data-d="${key}">Tienes pendiente la revisión de la semana. Hacerla ahora (10 minutos)</button>` : '');
+  const today = ymd(now), active = state.habits.length || state.goals.length;
+  const pending = active && ['year', 'quarter', 'month', 'week'].map(k => reviewPeriod(k, now))
+    .find(p => !state.reviews[p.key]?.doneAt && daysIn(p.to, today).length - 1 <= GRACE[p.kind]);
+  const focus = ['week', 'month', 'quarter', 'year'].map(k => {
+    const f = state.reviews[periodOf(keyFor(k, now)).prev]?.answers.focus;
+    return f ? `<li><span class="hmeta">${cap(PERIOD[k].this)}</span><strong>${esc(f)}</strong></li>` : '';
+  }).join('');
+  return (focus ? `<section class="focus panel"><ul>${focus}</ul></section>` : '') +
+    (pending ? `<button class="note" data-act="review" data-d="${pending.key}">Tienes pendiente la revisión ${pendingName(pending)}. Hacerla ahora</button>` : '');
 }
 
 function reviewList() {
-  const keys = Object.keys(state.reviews).sort().reverse();
-  return keys.length ? `<details class="closed"><summary>Revisiones anteriores (${keys.length})</summary><ul class="manage">${keys.map(k => `<li class="panel">
-    <span>${weekLabel(parseYmd(k))}<small>${state.reviews[k].doneAt ? 'Terminada' : 'Sin terminar'}</small></span>
-    <button class="link" data-act="review" data-d="${k}">Abrir</button></li>`).join('')}</ul></details>` : '';
+  const ps = Object.keys(state.reviews).map(periodOf).sort((a, b) => b.to.localeCompare(a.to) || a.kind.localeCompare(b.kind));
+  return ps.length ? `<details class="closed"><summary>Revisiones anteriores (${ps.length})</summary><ul class="manage">${ps.map(p => `<li class="panel">
+    <span>${periodLabel(p)}<small>${state.reviews[p.key].doneAt ? 'Terminada' : 'Sin terminar'}</small></span>
+    <button class="link" data-act="review" data-d="${p.key}">Abrir</button></li>`).join('')}</ul></details>` : '';
 }
 
 // ---- Sleep (stored on the day you wake up)
@@ -1039,6 +1066,39 @@ function viewAnalisis() {
     ${focusHtml ? `<h2 class="sub">Enfoque por meta</h2><ul class="meters">${focusHtml}</ul>` : ''}`;
 }
 
+// ---- Values and vision
+const compassView = () => {
+  const c = state.compass;
+  return `${c.values.length ? `<ul class="values">${c.values.map(v => `<li>${esc(v)}</li>`).join('')}</ul>` : ''}${c.vision ? `<p class="plan">${esc(c.vision)}</p>` : ''}`;
+};
+function compassBox() {
+  const c = state.compass;
+  if (!c.values.length && !c.vision) return `<section class="compass panel"><p>Antes de elegir metas, define qué es importante para ti: tus valores y cómo quieres que sea tu vida en unos años.</p>
+    <button class="btn ghost" data-act="compass">Definir valores y visión</button></section>`;
+  return `<section class="compass panel"><div class="compass-head"><h2>Valores y visión</h2><button class="link" data-act="compass">Editar</button></div>${compassView()}</section>`;
+}
+function openCompass() {
+  const c = state.compass;
+  $sheet.redraw = null;
+  $sheet.innerHTML = `<form id="compassf">
+    <h2>Valores y visión</h2>
+    <label class="field">Tus valores, uno por línea (hasta 5)<textarea name="values" rows="5" placeholder="Salud&#10;Familia&#10;Aprender&#10;Libertad">${esc(c.values.join('\n'))}</textarea></label>
+    <label class="field">Tu visión: cómo quieres que sea tu vida dentro de 3 a 5 años<textarea name="vision" rows="5" maxlength="1000" placeholder="Opcional">${esc(c.vision)}</textarea></label>
+    <p class="muted small">Te los recordaremos al crear metas y en las revisiones del mes, el trimestre y el año.</p>
+    <div class="row"><button class="btn">Guardar</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
+  </form>`;
+  $sheet.querySelector('#compassf').onsubmit = e => {
+    e.preventDefault();
+    const lines = e.target.values.value.split('\n').map(v => v.trim().slice(0, 40)).filter(Boolean);
+    if (lines.length > 5) return alert('Elige como máximo 5 valores. Menos es más claro.');
+    state.compass = { values: lines, vision: e.target.vision.value.trim() };
+    save(state);
+    $sheet.close();
+    render();
+  };
+  $sheet.showModal();
+}
+
 const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : calMode === 'ano' ? viewAno() : viewAnalisis()), diario: viewDiario, metas: viewMetas, habitos: viewHabitos };
 
 // `enter` replays the ink-stroke reveal; only on navigation, never on a check-in.
@@ -1198,6 +1258,7 @@ document.addEventListener('click', e => {
     case 'rate': return rate5(el.dataset.k, d, +el.dataset.v);
     case 'prompts': return savePrompts();
     case 'review': return openReview(d);
+    case 'compass': return openCompass();
     case 'sleep': return openSleep(d);
     case 'editmode':
       editMode = editMode === el.dataset.k ? null : el.dataset.k;

@@ -16,6 +16,7 @@ export function runs(days, done) {
   return out;
 }
 
+const dayDiff = (a, b) => Math.round((b - a) / 864e5); // rounding absorbs DST hours
 const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 export const mondayOf = d => addDays(d, -((d.getDay() + 6) % 7));
 export const weekdayIdx = d => (d.getDay() + 6) % 7; // 0 = Monday
@@ -88,7 +89,6 @@ export const monthRow = (y, m) => {
 };
 
 const clamp01 = x => Math.min(1, Math.max(0, x));
-const dayDiff = (a, b) => Math.round((b - a) / 864e5); // rounding absorbs DST hours
 
 // Goal progress, plus where you should be by now when there is a deadline.
 export function goalProgress(g, now) {
@@ -120,8 +120,31 @@ export function weekStats(freq = { type: 'daily' }, done, monday, now) {
   return { done: sched.filter(d => done.has(ymd(d))).length, due: sched.length };
 }
 
-// The week to review: the current one on Sunday, otherwise the one that just ended.
-export const reviewWeek = now => addDays(mondayOf(startOfDay(now)), now.getDay() === 0 ? 0 : -7);
+// Review periods. Keys: a week is its Monday 'YYYY-MM-DD'; then 'M-YYYY-MM', 'Q-YYYY-N', 'Y-YYYY'.
+export function keyFor(kind, d) {
+  const y = d.getFullYear(), m = d.getMonth();
+  if (kind === 'week') return ymd(mondayOf(d));
+  if (kind === 'month') return `M-${y}-${String(m + 1).padStart(2, '0')}`;
+  if (kind === 'quarter') return `Q-${y}-${Math.floor(m / 3) + 1}`;
+  return `Y-${y}`;
+}
+export function periodOf(key) {
+  let kind, from, to;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(key)) { kind = 'week'; from = parseYmd(key); to = addDays(from, 6); }
+  else {
+    const [k, y, n] = key.split('-').map((x, i) => (i ? +x : x));
+    if (k === 'M') { kind = 'month'; from = new Date(y, n - 1, 1); to = new Date(y, n, 0); }
+    else if (k === 'Q') { kind = 'quarter'; from = new Date(y, (n - 1) * 3, 1); to = new Date(y, n * 3, 0); }
+    else { kind = 'year'; from = new Date(y, 0, 1); to = new Date(y, 11, 31); }
+  }
+  return { key, kind, from: ymd(from), to: ymd(to), prev: keyFor(kind, addDays(from, -1)) };
+}
+// What to review now: the current period in its last days, otherwise the one that just ended.
+const TAIL = { week: 1, month: 3, quarter: 7, year: 12 };
+export function reviewPeriod(kind, now) {
+  const today = startOfDay(now), cur = periodOf(keyFor(kind, today));
+  return dayDiff(today, parseYmd(cur.to)) < TAIL[kind] ? cur : periodOf(cur.prev);
+}
 
 // Minutes slept between two "HH:MM" times, crossing midnight when needed.
 export function sleepMins(bed, wake) {

@@ -33,7 +33,8 @@ export function cleanEntry(e) {
   return entry.mood || entry.energy || entry.text || entry.sleep || entry.bed || Object.keys(answers).length ? entry : null;
 }
 
-export const REVIEW_QS = ['worked', 'didnt', 'change', 'focus'];
+export const REVIEW_QS = ['worked', 'didnt', 'change', 'focus', 'vision'];
+const REVIEW_KEY = /^(\d{4}-\d{2}-\d{2}|M-\d{4}-(0[1-9]|1[0-2])|Q-\d{4}-[1-4]|Y-\d{4})$/;
 
 export function cleanReview(r) {
   if (!r || typeof r !== 'object') return null;
@@ -69,7 +70,7 @@ export function cleanGoal(g, habitIds) {
   };
 }
 
-const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, metrics: [], values: {}, focus: [], timer: null, lastBackup: null });
+const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, compass: { values: [], vision: '' }, metrics: [], values: {}, focus: [], timer: null, lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
@@ -100,7 +101,7 @@ export function fromJSON(obj) {
   const reviews = {};
   for (const [k, r] of Object.entries(obj.reviews && typeof obj.reviews === 'object' ? obj.reviews : {})) {
     const review = cleanReview(r);
-    if (DATE.test(k) && review) reviews[k] = review;
+    if (REVIEW_KEY.test(k) && review) reviews[k] = review;
   }
   const metrics = Array.isArray(obj.metrics)
     ? obj.metrics.filter(m => m && typeof m.id === 'string' && str(m.name, 40)).map(m => ({ id: m.id, name: str(m.name, 40), unit: str(m.unit, 12) }))
@@ -118,7 +119,9 @@ export function fromJSON(obj) {
   const t = obj.timer;
   const timer = t && iso(t.start) ? { start: t.start, target: num(t.target) > 0 ? t.target : null, goal: goalIds.has(t.goal) ? t.goal : null } : null;
   if (timer && ['work', 'break', 'ready'].includes(t.phase) && Number.isInteger(t.pomo) && t.pomo >= 0) Object.assign(timer, { phase: t.phase, pomo: t.pomo });
-  return { version: 1, habits, done, goals, journal, prompts, reviews, metrics, values, focus, timer, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
+  const c = obj.compass ?? {};
+  const compass = { values: (Array.isArray(c.values) ? c.values : []).map(v => str(v, 40)).filter(Boolean).slice(0, 5), vision: str(c.vision, 1000) };
+  return { version: 1, habits, done, goals, journal, prompts, reviews, compass, metrics, values, focus, timer, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
 }
 
 export const toJSON = s => ({
@@ -128,6 +131,7 @@ export const toJSON = s => ({
   journal: s.journal,
   prompts: s.prompts,
   reviews: s.reviews,
+  compass: s.compass,
   metrics: s.metrics,
   values: s.values,
   focus: s.focus,

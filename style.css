@@ -674,3 +674,17 @@ dialog form { padding-top: 16px; }
 
 /* Tab bar: the active tab is pressed ink; it settles in instead of snapping */
 .tabs button { transition: transform 160ms var(--ease-out), background-color 200ms ease, color 200ms ease; }
+
+/* Values and vision */
+.compass { padding: 14px; margin-bottom: 16px; display: grid; gap: 8px; justify-items: start; }
+.compass p { margin: 0; }
+.compass-head { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.compass-head h2 { margin: 0; font: 400 1.15rem/1.2 var(--display); }
+.values { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.values li { padding: 3px 12px; border: 2px solid var(--ink); border-radius: 99px; font-weight: 700; font-size: 0.9rem; }
+.compass .plan, .entry .plan { margin-top: 4px; }
+
+/* Priorities from the last reviews, on Hoy */
+.focus ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.focus li { display: grid; gap: 0; }
+.review-seg { margin-bottom: 4px; }

@@ -90,7 +90,7 @@ test('journal entries: empty ones vanish, scales are 1-5, prompts survive import
 });
 
 test('weekly review: stats per frequency, which week, and saved answers', async () => {
-  const { weekStats, reviewWeek, mondayOf } = await import('../logic.js');
+  const { weekStats, reviewPeriod, mondayOf } = await import('../logic.js');
   const { cleanReview } = await import('../store.js');
   const mon = new Date(2026, 10, 16);
   const done = set('2026-11-16', '2026-11-18', '2026-11-19', '2026-11-22');
@@ -99,8 +99,8 @@ test('weekly review: stats per frequency, which week, and saved answers', async 
   assert.deepEqual(weekStats({ type: 'days', days: [0, 2, 4] }, done, mon, now), { done: 2, due: 3 });
   assert.deepEqual(weekStats({ type: 'weekly', times: 3 }, done, mon, now), { done: 3, due: 3 });
   assert.deepEqual(weekStats({ type: 'daily' }, done, mon, d(10, 18)), { done: 2, due: 3 }); // mid-week
-  assert.equal(ymd(reviewWeek(now)), '2026-11-16'); // Sunday reviews the current week
-  assert.equal(ymd(reviewWeek(d(10, 24))), '2026-11-16'); // Tuesday reviews the week that ended
+  assert.equal(reviewPeriod('week', now).key, '2026-11-16'); // Sunday reviews the current week
+  assert.equal(reviewPeriod('week', d(10, 24)).key, '2026-11-16'); // Tuesday reviews the week that ended
   assert.equal(ymd(mondayOf(d(10, 22))), '2026-11-16');
   assert.equal(cleanReview({ answers: { worked: ' ' } }), null);
   assert.deepEqual(cleanReview({ answers: { focus: 'Dormir 7 h' }, doneAt: '2026-11-22' }).answers.focus, 'Dormir 7 h');
@@ -151,4 +151,23 @@ test('pomodoro advances through every phase, even after the app was closed', asy
   assert.equal(r.timer.start, new Date(t0 + 30 * 60000).toISOString());
   r = advancePomodoro({ ...start, pomo: 3 }, t0 + 26 * 60000);
   assert.equal(r.timer.target, 15); // every 4th break is long
+});
+
+test('review periods: keys, ranges, previous period and which one to review', async () => {
+  const { periodOf, keyFor, reviewPeriod } = await import('../logic.js');
+  const { fromJSON } = await import('../store.js');
+  assert.deepEqual(periodOf('M-2026-02'), { key: 'M-2026-02', kind: 'month', from: '2026-02-01', to: '2026-02-28', prev: 'M-2026-01' });
+  assert.deepEqual(periodOf('Q-2026-1'), { key: 'Q-2026-1', kind: 'quarter', from: '2026-01-01', to: '2026-03-31', prev: 'Q-2025-4' });
+  assert.equal(periodOf('Y-2026').prev, 'Y-2025');
+  assert.equal(periodOf('2026-11-16').prev, '2026-11-09');
+  assert.equal(keyFor('quarter', d(10, 21)), 'Q-2026-4');
+  assert.equal(reviewPeriod('month', d(10, 21)).key, 'M-2026-10'); // mid-month: the month that ended
+  assert.equal(reviewPeriod('month', d(10, 29)).key, 'M-2026-11'); // last days: this month
+  assert.equal(reviewPeriod('quarter', d(11, 26)).key, 'Q-2026-4');
+  assert.equal(reviewPeriod('year', d(0, 3)).key, 'Y-2025');
+  assert.equal(reviewPeriod('year', d(11, 22)).key, 'Y-2026');
+  const s = fromJSON({ version: 1, habits: [], done: {}, reviews: { 'M-2026-11': { answers: { focus: 'x' } }, 'M-2026-13': { answers: { focus: 'x' } }, 'Q-2026-4': { doneAt: '2026-12-30' } },
+    compass: { values: ['Salud', ' ', 'a', 'b', 'c', 'd', 'e'], vision: ' Vivir cerca del mar ' } });
+  assert.deepEqual(Object.keys(s.reviews), ['M-2026-11', 'Q-2026-4']);
+  assert.deepEqual(s.compass, { values: ['Salud', 'a', 'b', 'c', 'd'], vision: 'Vivir cerca del mar' });
 });
