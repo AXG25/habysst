@@ -32,6 +32,10 @@ const check = (name, cond) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`)
   const today = () => p.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
 
   await p.goto(url);
+  await p.waitForSelector('.driver-popover', { timeout: 8000 }).catch(() => {});
+  const first = await ls();
+  check('first open starts from the recipe, with removable history', first?.habits?.length === 6 && first.lists.length === 2 && first.demo?.journal.length > 0);
+  check('first open shows the tutorial once', !!(await p.$('.driver-popover')));
   await p.evaluate(() => localStorage.setItem('habysst', JSON.stringify({ version: 1,
     habits: [{ id: 'h1', name: 'Leer', tone: 0 }, { id: 'h2', name: 'Correr', tone: 1 }], done: { h1: ['2026-11-19', '2026-11-20'] },
     journal: { '2026-11-20': { mood: 4, text: 'Un buen día' } }, lastBackup: new Date().toISOString() })));

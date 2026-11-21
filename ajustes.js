@@ -1,3 +1,5 @@
+import { removeFiller } from './seed.js';
+import { startTutorial } from './tutorial.js';
 import { ymd } from './logic.js';
 import { save, fromJSON, toJSON, snapshot, listSnapshots, readSnapshot } from './store.js';
 import { $sheet, esc, header, plural, setUi, stamp, ui } from './ui.js';
@@ -28,6 +30,13 @@ export function viewHabitos() {
     <label class="btn ghost">Importar respaldo<input type="file" accept="application/json,.json" id="import" hidden></label></div>
     <div id="datastatus" class="datastatus" aria-live="polite"><p class="muted">Comprobando la protección…</p></div>
   </section>
+  ${state.demo ? `<section class="panel filler">
+    <h2>Historial inicial</h2>
+    <p>La app empezó con un historial de los meses anteriores para que vieras cómo funcionan las rachas, los calendarios y las gráficas. Bórralo cuando quieras quedarte solo con tus propios registros. Tus hábitos, metas, métricas y listas se mantienen, y también lo que hayas registrado tú.</p>
+    <button class="btn ghost" data-act="filler-clear">Borrar historial inicial</button>
+  </section>` : ''}
+  <h2 class="sub">Ayuda</h2>
+  <button class="btn ghost wide" data-act="tour">Ver el tutorial</button>
   <footer class="signature">
     <span class="seal" aria-hidden="true">AXG<br>25</span>
     <p><span class="brand">HabyssT</span>Diseñada y creada por <strong>AXG25</strong>.</p>
@@ -145,6 +154,15 @@ addEventListener('storage', e => {
 // Leaving the app (switching apps, locking the phone) writes any text still waiting to be saved.
 
 export const actions = {
+  'tour': () => startTutorial(),
+  'filler-clear': async () => {
+    if (!confirm('¿Borrar el historial inicial? Tus hábitos, metas, métricas, listas y lo que hayas registrado tú se mantienen.')) return;
+    await snapshot(state, 'Antes de borrar el historial inicial');
+    removeFiller(state);
+    save(state);
+    render();
+    stamp('Borrado');
+  },
   'restore': (el, e) => { 
     return restoreSnapshot(el.dataset.k, el.dataset.at);
   },

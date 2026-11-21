@@ -72,7 +72,7 @@ export function cleanGoal(g, habitIds) {
   };
 }
 
-const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, compass: { values: [], vision: '' }, lists: [], metrics: [], values: {}, focus: [], timer: null, lastBackup: null });
+const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, compass: { values: [], vision: '' }, lists: [], metrics: [], values: {}, focus: [], timer: null, demo: null, lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
@@ -131,7 +131,13 @@ export function fromJSON(obj) {
       items: (Array.isArray(l.items) ? l.items : []).filter(i => i && isId(i.id) && str(i.text, 200))
         .map(i => ({ id: i.id, text: str(i.text, 200), done: i.done === true, doneAt: i.done === true ? date(i.doneAt) : null })),
     }));
-  return { version: 1, habits, done, goals, journal, prompts, reviews, compass, lists, metrics, values, focus, timer, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
+  // Which records were generated on first run (see seed.js), so they can be removed exactly.
+  const dm = obj.demo, dates = a => (Array.isArray(a) ? a.filter(k => typeof k === 'string' && DATE.test(k)) : []);
+  const byId = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).filter(([k]) => isId(k)).map(([k, v]) => [k, dates(v)]));
+  const demo = dm && typeof dm === 'object'
+    ? { done: byId(dm.done), journal: dates(dm.journal), values: byId(dm.values), focus: (Array.isArray(dm.focus) ? dm.focus : []).filter(iso) }
+    : null;
+  return { version: 1, habits, done, goals, journal, prompts, reviews, compass, lists, metrics, values, focus, timer, demo, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
 }
 
 export const toJSON = s => ({
@@ -146,6 +152,7 @@ export const toJSON = s => ({
   metrics: s.metrics,
   values: s.values,
   focus: s.focus,
+  demo: s.demo,
   timer: s.timer,
   done: Object.fromEntries(s.habits.map(h => [h.id, [...(s.done[h.id] ?? [])].sort()])),
   lastBackup: s.lastBackup,

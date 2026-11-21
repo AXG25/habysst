@@ -1,3 +1,5 @@
+import { starter } from './seed.js';
+import { startTutorial } from './tutorial.js';
 import { save, hasData, loadProblem, recover } from './store.js';
 import { $sheet, $view, reduceMotion, ui } from './ui.js';
 import { resetCache, setState, setTab, state, tab } from './core.js';
@@ -61,7 +63,12 @@ if (hasData(state)) navigator.storage?.persist?.();
 const startProblem = loadProblem;
 if (startProblem) recover().then(s => {
   if (!s) {
-    if (startProblem === 'corrupt') alert('Tus datos guardados estaban dañados y no hay copia interna. Si tienes un respaldo, impórtalo desde Ajustes.');
+    if (startProblem === 'corrupt') return alert('Tus datos guardados estaban dañados y no hay copia interna. Si tienes un respaldo, impórtalo desde Ajustes.');
+    // First open on this phone: start from the recipe instead of an empty screen.
+    setState(starter(new Date()));
+    save(state);
+    render(true);
+    if (!ui.tutorialDone) startTutorial();
     return;
   }
   setState(s);

@@ -205,3 +205,32 @@ test('ids from a backup file must be plain: no HTML, no __proto__', async () => 
   assert.deepEqual(s.habits.map(h => h.id), ['c0ffee-12_ab']);
   assert.deepEqual(s.lists.map(l => [l.id, l.items.map(i => i.id)]), [['l1', ['i1']]]);
 });
+
+test('first-run starter: complete recipe, 90 days of history, and exact removal of that history', async () => {
+  const { starter, removeFiller } = await import('../seed.js');
+  const { fromJSON, toJSON } = await import('../store.js');
+  const now = new Date(2026, 10, 21, 10);
+  const s = fromJSON(JSON.parse(JSON.stringify(toJSON(starter(now))))); // survives a save and reload
+  assert.equal(s.habits.length, 6);
+  assert.equal(s.goals.length, 2);
+  assert.equal(s.metrics.length, 2);
+  assert.equal(s.lists.length, 2);
+  const allDates = Object.values(s.done).flatMap(set => [...set]);
+  assert.ok(allDates.length > 250);
+  assert.ok(allDates.every(k => k < '2026-11-21' && k >= '2026-08-23')); // nothing today or in the future
+  assert.ok(Object.keys(s.journal).length > 60);
+  // The person logs today, writes on one past day and checks a past day themselves.
+  const [h0] = s.habits;
+  s.done[h0.id].add('2026-11-21');
+  const written = Object.keys(s.journal)[5];
+  s.journal[written].text = 'Lo escribí yo';
+  const own = '2026-08-01';
+  s.done[h0.id].add(own);
+  removeFiller(s);
+  assert.equal(s.demo, null);
+  assert.deepEqual([...s.done[h0.id]].sort(), [own, '2026-11-21']);
+  assert.deepEqual(Object.keys(s.journal), [written]);
+  assert.ok(Object.values(s.values).every(v => !Object.keys(v).length));
+  assert.equal(s.focus.length, 0);
+  assert.equal(s.habits.length, 6); // the recipe itself stays
+});
