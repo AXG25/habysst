@@ -88,3 +88,20 @@ test('journal entries: empty ones vanish, scales are 1-5, prompts survive import
   assert.equal(fromJSON(JSON.parse(JSON.stringify(toJSON(s)))).journal['2026-11-20'].mood, 4);
   assert.equal(fromJSON({ version: 1, habits: [], done: {} }).prompts.length, 3); // older backups get defaults
 });
+
+test('weekly review: stats per frequency, which week, and saved answers', async () => {
+  const { weekStats, reviewWeek, mondayOf } = await import('../logic.js');
+  const { cleanReview } = await import('../store.js');
+  const mon = new Date(2026, 10, 16);
+  const done = set('2026-11-16', '2026-11-18', '2026-11-19', '2026-11-22');
+  const now = d(10, 22); // Sunday
+  assert.deepEqual(weekStats({ type: 'daily' }, done, mon, now), { done: 4, due: 7 });
+  assert.deepEqual(weekStats({ type: 'days', days: [0, 2, 4] }, done, mon, now), { done: 2, due: 3 });
+  assert.deepEqual(weekStats({ type: 'weekly', times: 3 }, done, mon, now), { done: 3, due: 3 });
+  assert.deepEqual(weekStats({ type: 'daily' }, done, mon, d(10, 18)), { done: 2, due: 3 }); // mid-week
+  assert.equal(ymd(reviewWeek(now)), '2026-11-16'); // Sunday reviews the current week
+  assert.equal(ymd(reviewWeek(d(10, 24))), '2026-11-16'); // Tuesday reviews the week that ended
+  assert.equal(ymd(mondayOf(d(10, 22))), '2026-11-16');
+  assert.equal(cleanReview({ answers: { worked: ' ' } }), null);
+  assert.deepEqual(cleanReview({ answers: { focus: 'Dormir 7 h' }, doneAt: '2026-11-22' }).answers.focus, 'Dormir 7 h');
+});

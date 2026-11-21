@@ -1,5 +1,5 @@
-import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress } from './logic.js';
-import { load, save, fromJSON, toJSON, cleanFreq, cleanGoal, cleanEntry, TONES } from './store.js';
+import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress, mondayOf, weekStats, reviewWeek } from './logic.js';
+import { load, save, fromJSON, toJSON, cleanFreq, cleanGoal, cleanEntry, cleanReview, REVIEW_QS, TONES } from './store.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -70,7 +70,7 @@ const emptyState = `<section class="empty panel">
 function viewHoy() {
   const now = new Date(), key = ymd(now);
   const head = header(`${DAYS[now.getDay()]} ${now.getDate()}`, `${cap(MONTHS[now.getMonth()])} ${now.getFullYear()}`);
-  if (!state.habits.length) return head + checkIn(key) + emptyState;
+  if (!state.habits.length) return head + reviewNotice(now) + checkIn(key) + emptyState;
 
   const strip = Array.from({ length: 14 }, (_, i) => addDays(now, i - 13));
   const due = state.habits.filter(h => dueOn(h, now));
@@ -92,7 +92,7 @@ function viewHoy() {
     ? `<button class="note" data-act="export">${daysSince === null ? 'Aún no tienes respaldo.' : `Último respaldo hace ${daysSince} días.`} Exportar ahora</button>`
     : '';
 
-  return head + checkIn(key) + `<p class="count">${doneToday} de ${due.length} hechos hoy</p>${backupNote}
+  return head + reviewNotice(now) + checkIn(key) + `<p class="count">${doneToday} de ${due.length} hechos hoy</p>${backupNote}
   <ul class="habits">${due.map(item).join('')}</ul>
   ${rest.length ? `<h2 class="sub">Hoy no toca</h2><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}`;
 }
@@ -389,6 +389,21 @@ function rate5(kind, key, v) {
 
 const longDate = k => { const d = parseYmd(k); return `${DAYS[d.getDay()]} ${d.getDate()} de ${MONTHS[d.getMonth()]}`; };
 
+// Saves a sheet's form shortly after each keystroke, and once more when the sheet closes, however it closes.
+function autosave(form, write) {
+  let timer = null;
+  const flush = () => {
+    clearTimeout(timer);
+    timer = null;
+    write(new FormData(form));
+    save(state);
+    form.querySelector('.saved').textContent = 'Guardado.';
+  };
+  form.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(flush, 300); });
+  $sheet.addEventListener('close', () => { if (timer) flush(); render(); }, { once: true });
+  return flush;
+}
+
 function openEntry(key) {
   const e = entryOf(key) ?? { answers: {} };
   // Questions answered before you edited the list stay visible on their entries.
@@ -402,19 +417,8 @@ function openEntry(key) {
       <p class="muted saved" aria-live="polite">Se guarda mientras escribes.</p>
       <div class="row"><button class="btn">Listo</button></div>
     </form>`;
-    const form = $sheet.querySelector('#entry');
-    let timer = null;
-    const flush = () => {
-      clearTimeout(timer);
-      timer = null;
-      const f = new FormData(form);
-      setEntry(key, { text: f.get('text'), answers: Object.fromEntries(qs.map((q, i) => [q, f.get(`q${i}`)])) });
-      save(state);
-      form.querySelector('.saved').textContent = 'Guardado.';
-    };
-    form.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(flush, 300); });
-    // Save any pending keystrokes when the sheet closes, however it closes.
-    $sheet.addEventListener('close', () => { if (timer) flush(); render(); }, { once: true });
+    autosave($sheet.querySelector('#entry'), f =>
+      setEntry(key, { text: f.get('text'), answers: Object.fromEntries(qs.map((q, i) => [q, f.get(`q${i}`)])) }));
   };
   // Rating inside the entry only redraws the scales, so typed text is untouched.
   $sheet.redraw = () => { const sc = $sheet.querySelector('.scales'); if (sc) sc.outerHTML = scales(key); };
@@ -446,7 +450,9 @@ function entryCards(q) {
 function viewDiario() {
   const n = Object.keys(state.journal).length;
   return header('Diario', plural(n, 'entrada', 'entradas')) + `
-    <button class="btn wide" data-act="entry" data-d="${ymd(new Date())}">${entryOf(ymd(new Date())) ? 'Seguir con la entrada de hoy' : 'Escribir la entrada de hoy'}</button>
+    <div class="row stack"><button class="btn" data-act="entry" data-d="${ymd(new Date())}">${entryOf(ymd(new Date())) ? 'Seguir con la entrada de hoy' : 'Escribir la entrada de hoy'}</button>
+    <button class="btn ghost" data-act="review" data-d="${ymd(reviewWeek(new Date()))}">Revisión de la semana</button></div>
+    ${reviewList()}
     <label class="field search">Buscar en el diario<input type="search" id="jsearch" placeholder="Palabra o frase" autocomplete="off"></label>
     <div id="entries">${entryCards('')}</div>
     <details class="closed"><summary>Preguntas guía</summary>
@@ -463,6 +469,99 @@ function savePrompts() {
 document.addEventListener('input', e => {
   if (e.target.id === 'jsearch') document.getElementById('entries').innerHTML = entryCards(e.target.value);
 });
+
+// ---- Weekly review
+const Q_LABELS = {
+  worked: '¿Qué funcionó esta semana?',
+  didnt: '¿Qué no funcionó y por qué?',
+  change: '¿Qué vas a cambiar la próxima semana?',
+  focus: 'Tu prioridad principal para la próxima semana',
+};
+const dm = d => `${d.getDate()} de ${MONTHS[d.getMonth()]}`;
+function weekLabel(mon) {
+  const sun = addDays(mon, 6);
+  return mon.getMonth() === sun.getMonth() ? `Semana del ${mon.getDate()} al ${dm(sun)}` : `Semana del ${dm(mon)} al ${dm(sun)}`;
+}
+
+function avgOf(kind, mon) {
+  const vals = Array.from({ length: 7 }, (_, i) => state.journal[ymd(addDays(mon, i))]?.[kind]).filter(Boolean);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+
+function reviewData(mon) {
+  const now = new Date(), prev = addDays(mon, -7);
+  const habits = state.habits.map(h => {
+    const w = weekStats(h.freq, setOf(h), mon, now), p = weekStats(h.freq, setOf(h), prev, now);
+    return `<li><i class="sw t${h.tone}"></i><span>${esc(h.name)}</span><b>${w.done}/${w.due}</b>
+      <small>Semana anterior: ${p.done}/${p.due}</small></li>`;
+  }).join('');
+  const feel = ['mood', 'energy'].map(k => {
+    const a = avgOf(k, mon), b = avgOf(k, prev);
+    if (a === null) return '';
+    const delta = b === null ? '' : ` (semana anterior: ${fmt(Math.round(b * 10) / 10)})`;
+    return `<li><span>${k === 'mood' ? 'Ánimo medio' : 'Energía media'}</span><b>${fmt(Math.round(a * 10) / 10)} de 5</b><small>${LEVELS[Math.round(a) - 1]}${delta}</small></li>`;
+  }).join('');
+  const sun = ymd(addDays(mon, 6)), monKey = ymd(mon);
+  const goals = activeGoals().map(g => {
+    const s = goalSummary(g);
+    let moved = '';
+    if (g.kind === 'number') {
+      const before = [...g.log].reverse().find(e => e.d < monKey)?.v ?? g.start;
+      const after = [...g.log].reverse().find(e => e.d <= sun)?.v ?? g.start;
+      moved = before === after ? 'Sin cambios esta semana.' : `Esta semana: de ${fmt(before)} a ${fmt(after)}${u(g)}.`;
+    }
+    return `<li><span>${esc(g.title)}</span><b>${s.pctLabel}</b><small>${[moved, s.pace].filter(Boolean).join(' ')}</small></li>`;
+  }).join('');
+  const entries = Array.from({ length: 7 }, (_, i) => state.journal[ymd(addDays(mon, i))]).filter(Boolean).length;
+  return `${habits ? `<h3>Hábitos</h3><ul class="legend data">${habits}</ul>` : ''}
+    ${feel ? `<h3>Cómo estuviste</h3><ul class="legend data">${feel}</ul>` : ''}
+    ${goals ? `<h3>Metas</h3><ul class="legend data">${goals}</ul>` : ''}
+    <p class="muted">${plural(entries, 'día', 'días')} con entrada en el diario.</p>`;
+}
+
+function openReview(key) {
+  const mon = parseYmd(key);
+  const r = state.reviews[key] ?? { answers: {}, doneAt: null };
+  $sheet.redraw = null;
+  $sheet.innerHTML = `<form method="dialog" id="review" class="entry">
+    <h2 tabindex="-1" autofocus>${weekLabel(mon)}</h2>
+    ${reviewData(mon)}
+    <h3>Tu revisión</h3>
+    ${REVIEW_QS.map(q => `<label class="field">${Q_LABELS[q]}<textarea name="${q}" rows="${q === 'focus' ? 1 : 3}" maxlength="2000">${esc(r.answers[q] ?? '')}</textarea></label>`).join('')}
+    <p class="muted saved" aria-live="polite">Se guarda mientras escribes.</p>
+    <div class="row">${r.doneAt ? `<button class="btn">Listo</button>` : `<button type="button" class="btn" data-act="review-done" data-d="${key}">Terminar revisión</button><button class="btn ghost">Seguir luego</button>`}</div>
+  </form>`;
+  const write = f => {
+    const next = cleanReview({ answers: Object.fromEntries(REVIEW_QS.map(q => [q, f.get(q)])), doneAt: state.reviews[key]?.doneAt });
+    if (next) state.reviews[key] = next;
+    else delete state.reviews[key];
+  };
+  $sheet.flush = autosave($sheet.querySelector('#review'), write);
+  if (!$sheet.open) $sheet.showModal();
+}
+
+function finishReview(key) {
+  $sheet.flush();
+  state.reviews[key] = { ...(state.reviews[key] ?? { answers: Object.fromEntries(REVIEW_QS.map(q => [q, ''])) }), doneAt: ymd(new Date()) };
+  save(state);
+  $sheet.close();
+  stamp('Revisada');
+}
+
+function reviewNotice(now) {
+  const key = ymd(reviewWeek(now));
+  const pending = [0, 1, 2].includes(now.getDay()) && !state.reviews[key]?.doneAt && (state.habits.length || state.goals.length);
+  const focus = state.reviews[ymd(addDays(mondayOf(now), -7))]?.answers.focus;
+  return (focus ? `<section class="focus panel"><span class="hmeta">Prioridad de esta semana</span><strong>${esc(focus)}</strong></section>` : '') +
+    (pending ? `<button class="note" data-act="review" data-d="${key}">Tienes pendiente la revisión de la semana. Hacerla ahora (10 minutos)</button>` : '');
+}
+
+function reviewList() {
+  const keys = Object.keys(state.reviews).sort().reverse();
+  return keys.length ? `<details class="closed"><summary>Revisiones anteriores (${keys.length})</summary><ul class="manage">${keys.map(k => `<li class="panel">
+    <span>${weekLabel(parseYmd(k))}<small>${state.reviews[k].doneAt ? 'Terminada' : 'Sin terminar'}</small></span>
+    <button class="link" data-act="review" data-d="${k}">Abrir</button></li>`).join('')}</ul></details>` : '';
+}
 
 const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : viewAno()), diario: viewDiario, metas: viewMetas, habitos: viewHabitos };
 
@@ -609,6 +708,8 @@ document.addEventListener('click', e => {
     case 'entry': return openEntry(d);
     case 'rate': return rate5(el.dataset.k, d, +el.dataset.v);
     case 'prompts': return savePrompts();
+    case 'review': return openReview(d);
+    case 'review-done': return finishReview(d);
     case 'new': return openEditor();
     case 'edit': return openEditor(state.habits.find(x => x.id === h));
     case 'close': return $sheet.close();

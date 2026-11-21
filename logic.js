@@ -17,7 +17,7 @@ export function runs(days, done) {
 }
 
 const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-const mondayOf = d => addDays(d, -((d.getDay() + 6) % 7));
+export const mondayOf = d => addDays(d, -((d.getDay() + 6) % 7));
 export const weekdayIdx = d => (d.getDay() + 6) % 7; // 0 = Monday
 
 // A habit's history as the periods its frequency asks for: days, scheduled weekdays or weeks.
@@ -109,3 +109,16 @@ export function goalProgress(g, now) {
   }
   return { value, pct: clamp01(pct), expected, daysLeft };
 }
+
+// Check-ins due vs done for one habit in the week starting `monday`, counting only days up to now.
+export function weekStats(freq = { type: 'daily' }, done, monday, now) {
+  const today = startOfDay(now);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i)).filter(d => d <= today);
+  const hits = days.filter(d => done.has(ymd(d)));
+  if (freq.type === 'weekly') return { done: Math.min(hits.length, freq.times), due: freq.times };
+  const sched = freq.type === 'days' ? days.filter(d => freq.days.includes(weekdayIdx(d))) : days;
+  return { done: sched.filter(d => done.has(ymd(d))).length, due: sched.length };
+}
+
+// The week to review: the current one on Sunday, otherwise the one that just ended.
+export const reviewWeek = now => addDays(mondayOf(startOfDay(now)), now.getDay() === 0 ? 0 : -7);

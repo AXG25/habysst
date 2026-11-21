@@ -30,6 +30,15 @@ export function cleanEntry(e) {
   return entry.mood || entry.energy || entry.text || Object.keys(answers).length ? entry : null;
 }
 
+export const REVIEW_QS = ['worked', 'didnt', 'change', 'focus'];
+
+export function cleanReview(r) {
+  if (!r || typeof r !== 'object') return null;
+  const answers = Object.fromEntries(REVIEW_QS.map(q => [q, str(r.answers?.[q], 2000)]));
+  const doneAt = date(r.doneAt);
+  return doneAt || Object.values(answers).some(Boolean) ? { answers, doneAt } : null;
+}
+
 export function cleanGoal(g, habitIds) {
   const title = str(g?.title, 80);
   if (!title || typeof g.id !== 'string') return null;
@@ -57,7 +66,7 @@ export function cleanGoal(g, habitIds) {
   };
 }
 
-const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], lastBackup: null });
+const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
@@ -85,7 +94,12 @@ export function fromJSON(obj) {
     if (DATE.test(k) && entry) journal[k] = entry;
   }
   const prompts = Array.isArray(obj.prompts) ? obj.prompts.map(x => str(x, 120)).filter(Boolean).slice(0, 8) : [...DEFAULT_PROMPTS];
-  return { version: 1, habits, done, goals, journal, prompts, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
+  const reviews = {};
+  for (const [k, r] of Object.entries(obj.reviews && typeof obj.reviews === 'object' ? obj.reviews : {})) {
+    const review = cleanReview(r);
+    if (DATE.test(k) && review) reviews[k] = review;
+  }
+  return { version: 1, habits, done, goals, journal, prompts, reviews, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
 }
 
 export const toJSON = s => ({
@@ -94,6 +108,7 @@ export const toJSON = s => ({
   goals: s.goals,
   journal: s.journal,
   prompts: s.prompts,
+  reviews: s.reviews,
   done: Object.fromEntries(s.habits.map(h => [h.id, [...(s.done[h.id] ?? [])].sort()])),
   lastBackup: s.lastBackup,
 });
