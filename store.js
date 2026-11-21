@@ -149,22 +149,113 @@ export const toJSON = s => ({
   lastBackup: s.lastBackup,
 });
 
+export const hasData = s =>
+  !!(s.habits.length || s.goals.length || s.lists.length || s.metrics.length || s.focus.length || Object.keys(s.journal).length);
+
+// What went wrong on load, if anything: 'missing' | 'corrupt' | null. Until recovery has been tried,
+// the second copy is never overwritten, so a bad main copy can't destroy the good one.
+export let loadProblem = null;
+
 export function load() {
-  const raw = localStorage.getItem(KEY);
-  if (!raw) return fresh();
+  let raw = null;
+  try { raw = localStorage.getItem(KEY); } catch { /* storage blocked: treated as missing */ }
+  if (!raw) { loadProblem = 'missing'; return fresh(); }
   try {
     return fromJSON(JSON.parse(raw));
   } catch {
-    localStorage.setItem(`${KEY}:corrupt:${Date.now()}`, raw); // never silently drop unreadable data
+    try { localStorage.setItem(`${KEY}:corrupt:${Date.now()}`, raw); } catch {} // never silently drop unreadable data
+    loadProblem = 'corrupt';
     return fresh();
   }
 }
 
+// Main copy: localStorage, written synchronously on every change so nothing waits on a promise.
 // shortcut: localStorage (~5 MB) fits years of check-ins and ~1 KB/day of journal; move to IndexedDB if entries get long or hold images.
 export function save(s) {
+  const json = JSON.stringify(toJSON(s));
   try {
-    localStorage.setItem(KEY, JSON.stringify(toJSON(s)));
+    localStorage.setItem(KEY, json);
   } catch {
     alert('No se pudo guardar. El almacenamiento del navegador está lleno o bloqueado. Exporta un respaldo ahora.');
+  }
+  mirror(s, json);
+}
+
+// ---- Second copy and automatic snapshots, in IndexedDB
+const STORE = 'kv', KEEP = 30;
+let dbp = null;
+const db = () => (dbp ??= new Promise((res, rej) => {
+  const r = indexedDB.open(KEY, 1);
+  r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+}));
+function req(mode, fn) {
+  return db().then(d => new Promise((res, rej) => {
+    const tx = d.transaction(STORE, mode), r = fn(tx.objectStore(STORE));
+    tx.oncomplete = () => res(r?.result);
+    tx.onerror = () => rej(tx.error);
+  }));
+}
+const idbGet = k => req('readonly', s => s.get(k));
+const idbPut = (k, v) => req('readwrite', s => s.put(v, k));
+const idbKeys = () => req('readonly', s => s.getAllKeys());
+const idbDel = k => req('readwrite', s => s.delete(k));
+const warn = e => console.warn('HabyssT: copia interna no disponible', e);
+
+let mirrorTimer = null;
+function mirror(s, json) {
+  if (loadProblem || typeof indexedDB === 'undefined') return;
+  clearTimeout(mirrorTimer);
+  mirrorTimer = setTimeout(async () => {
+    try {
+      // An emptied app never replaces a copy that still has data.
+      if (hasData(s) || !(await idbGet('current'))) await idbPut('current', json);
+      const day = new Date().toLocaleDateString('sv'); // local YYYY-MM-DD
+      if (hasData(s) && (await idbGet('snapday')) !== day) { await snapshot(s, 'Copia diaria'); await idbPut('snapday', day); }
+    } catch (e) { warn(e); }
+  }, 400);
+}
+
+// Oldest snapshots beyond KEEP are dropped; keys sort by time.
+export const toPrune = (keys, keep = KEEP) => keys.filter(k => k.startsWith('snap:')).sort().slice(0, -keep);
+
+export async function snapshot(s, reason) {
+  if (typeof indexedDB === 'undefined' || !hasData(s)) return;
+  try {
+    const at = new Date().toISOString();
+    await idbPut(`snap:${at}`, { at, reason, json: JSON.stringify(toJSON(s)) });
+    for (const k of toPrune(await idbKeys())) await idbDel(k);
+  } catch (e) { warn(e); }
+}
+
+export async function listSnapshots() {
+  try {
+    const keys = (await idbKeys()).filter(k => k.startsWith('snap:')).sort().reverse();
+    return Promise.all(keys.map(async k => { const v = await idbGet(k); return { key: k, at: v.at, reason: v.reason, summary: summarize(JSON.parse(v.json)) }; }));
+  } catch (e) { warn(e); return []; }
+}
+
+export async function readSnapshot(key) {
+  return fromJSON(JSON.parse((await idbGet(key)).json));
+}
+
+export const summarize = raw => {
+  const s = fromJSON(raw);
+  return { habits: s.habits.length, checks: s.habits.reduce((n, h) => n + s.done[h.id].size, 0), entries: Object.keys(s.journal).length, goals: s.goals.length, lists: s.lists.length };
+};
+
+// Called once at startup when the main copy was missing or unreadable.
+export async function recover() {
+  const problem = loadProblem;
+  try {
+    const json = typeof indexedDB === 'undefined' ? null : await idbGet('current');
+    const s = json ? fromJSON(JSON.parse(json)) : null;
+    return s && hasData(s) ? s : null;
+  } catch (e) {
+    warn(e);
+    return null;
+  } finally {
+    if (problem) loadProblem = null; // from now on the second copy follows the app again
   }
 }

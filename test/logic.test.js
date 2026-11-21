@@ -181,3 +181,16 @@ test('lists are validated on load and import', async () => {
   assert.equal(s.lists[0].name, 'Antes de morir');
   assert.deepEqual(s.lists[0].items.map(i => [i.text, i.done, i.doneAt]), [['Ver auroras', true, '2026-11-20'], ['Japón', false, null]]);
 });
+
+test('data protection helpers: emptiness, snapshot pruning and summaries', async () => {
+  const { hasData, toPrune, summarize, fromJSON } = await import('../store.js');
+  assert.equal(hasData(fromJSON({ version: 1, habits: [], done: {} })), false);
+  assert.equal(hasData(fromJSON({ version: 1, habits: [], done: {}, lists: [{ id: 'l', name: 'Súper', items: [] }] })), true);
+  const keys = ['current', 'snapday', ...Array.from({ length: 33 }, (_, i) => `snap:2026-11-${String(i % 28 + 1).padStart(2, '0')}T${String(i).padStart(2, '0')}`)];
+  const drop = toPrune(keys);
+  assert.equal(drop.length, 3);
+  assert.ok(drop.every(k => k.startsWith('snap:')));
+  assert.ok(drop.every(k => keys.filter(x => x.startsWith('snap:') && x > k).length >= 30)); // only the oldest go
+  assert.deepEqual(summarize({ version: 1, habits: [{ id: 'h', name: 'Leer' }], done: { h: ['2026-11-20', '2026-11-21'] }, journal: { '2026-11-21': { mood: 3 } } }),
+    { habits: 1, checks: 2, entries: 1, goals: 0, lists: 0 });
+});

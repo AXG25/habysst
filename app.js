@@ -1,5 +1,5 @@
 import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress, mondayOf, weekStats, keyFor, periodOf, reviewPeriod, sleepMins, mean, compareDays, advancePomodoro } from './logic.js';
-import { load, save, fromJSON, toJSON, cleanFreq, cleanGoal, cleanEntry, cleanReview, REVIEW_QS, TONES } from './store.js';
+import { load, save, fromJSON, toJSON, hasData, loadProblem, recover, snapshot, listSnapshots, readSnapshot, cleanFreq, cleanGoal, cleanEntry, cleanReview, REVIEW_QS, TONES } from './store.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -195,11 +195,12 @@ function viewHabitos() {
   <h2 class="sub">Tema</h2>
   <div class="seg" role="group" aria-label="Tema">${[['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']].map(([v, l]) => `<button data-act="theme" data-v="${v}" aria-pressed="${theme === v}">${l}</button>`).join('')}</div>
   <section class="panel backup">
-    <h2>Respaldo</h2>
-    <p>Tus datos se guardan solo en este teléfono. Exporta un respaldo y guárdalo en Drive, en tu correo o en Archivos. Para pasar tus datos a otro teléfono, importa ese archivo allí.</p>
-    <p class="muted">Último respaldo: ${last}</p>
+    <h2>Tus datos</h2>
+    <p>Todo se guarda solo en este teléfono, sin cuenta ni servidor. Si pierdes o cambias el teléfono, solo te salva un respaldo exportado: guárdalo en Drive, en tu correo o en Archivos, e impórtalo en el nuevo.</p>
+    <p class="muted">Último respaldo exportado: ${last}</p>
     <div class="row"><button class="btn" data-act="export">Exportar respaldo</button>
     <label class="btn ghost">Importar respaldo<input type="file" accept="application/json,.json" id="import" hidden></label></div>
+    <div id="datastatus" class="datastatus" aria-live="polite"><p class="muted">Comprobando la protección…</p></div>
   </section>
   <footer class="signature">
     <span class="seal" aria-hidden="true">AXG<br>25</span>
@@ -441,6 +442,7 @@ function rate5(kind, key, v) {
 
 const longDate = k => { const d = parseYmd(k); return `${DAYS[d.getDay()]} ${d.getDate()} de ${MONTHS[d.getMonth()]}`; };
 
+let pendingFlush = null; // typed text not yet saved; written immediately if the app goes to the background
 // Saves a sheet's form shortly after each keystroke, and once more when the sheet closes, however it closes.
 function autosave(form, write) {
   let timer = null;
@@ -451,8 +453,8 @@ function autosave(form, write) {
     save(state);
     form.querySelector('.saved').textContent = 'Guardado.';
   };
-  form.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(flush, 300); });
-  $sheet.addEventListener('close', () => { if (timer) flush(); render(); }, { once: true });
+  form.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(flush, 300); pendingFlush = () => timer && flush(); });
+  $sheet.addEventListener('close', () => { if (timer) flush(); pendingFlush = null; render(); }, { once: true });
   return flush;
 }
 
@@ -1201,6 +1203,7 @@ const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : cal
 // `enter` replays the ink-stroke reveal; only on navigation, never on a check-in.
 function render(enter = false) {
   cache = new Map();
+  if (tab === 'habitos') queueMicrotask(fillDataStatus);
   renderZen();
   $view.classList.toggle('enter', enter && !reduceMotion.matches);
   $view.innerHTML = views[tab]();
@@ -1281,7 +1284,15 @@ async function exportBackup() {
   const prev = state.lastBackup;
   state.lastBackup = new Date().toISOString();
   const name = `HabyssT-${ymd(new Date())}.json`;
-  const file = new File([JSON.stringify(toJSON(state), null, 1)], name, { type: 'application/json' });
+  const text = JSON.stringify(toJSON(state), null, 1);
+  try {
+    const back = fromJSON(JSON.parse(text)); // the file must read back with everything in it
+    if (back.habits.length !== state.habits.length || Object.keys(back.journal).length !== Object.keys(state.journal).length) throw new Error('el archivo no coincide con tus datos');
+  } catch (e) {
+    state.lastBackup = prev;
+    return alert(`No se pudo crear un respaldo fiable (${e.message}). Tus datos siguen intactos; inténtalo de nuevo.`);
+  }
+  const file = new File([text], name, { type: 'application/json' });
   try {
     if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: 'Respaldo de HabyssT' });
     else {
@@ -1302,7 +1313,8 @@ async function importBackup(file) {
   try {
     const next = fromJSON(JSON.parse(await file.text()));
     const days = next.habits.reduce((n, h) => n + next.done[h.id].size, 0);
-    if (!confirm(`Este respaldo tiene ${plural(next.habits.length, 'hábito', 'hábitos')} y ${days} registros. Reemplazará los datos de este teléfono. ¿Importar?`)) return;
+    if (!confirm(`Este respaldo tiene ${plural(next.habits.length, 'hábito', 'hábitos')} y ${days} registros. Reemplazará los datos de este teléfono (se guarda antes una copia automática). ¿Importar?`)) return;
+    await snapshot(state, 'Antes de importar un respaldo');
     state = next;
     save(state);
     render();
@@ -1350,6 +1362,7 @@ document.addEventListener('click', e => {
     case 'rate': return rate5(el.dataset.k, d, +el.dataset.v);
     case 'prompts': return savePrompts();
     case 'review': return openReview(d);
+    case 'restore': return restoreSnapshot(el.dataset.k, el.dataset.at);
     case 'metas-mode': { const m = el.dataset.m; return go(() => { metasMode = m; render(true); }, m === 'listas' ? 'fwd' : 'back'); }
     case 'list-open': { const id = el.dataset.l; return go(() => { openList = id; listEdit = false; render(); }, 'fwd'); }
     case 'list-back': return go(() => { openList = null; listEdit = false; render(); }, 'back');
@@ -1375,13 +1388,15 @@ document.addEventListener('click', e => {
     case 'list-clear': {
       const l = state.lists.find(x => x.id === openList), n = l.items.filter(x => x.done).length;
       if (!confirm(`¿Quitar ${plural(n, 'elemento hecho', 'elementos hechos')} de "${l.name}"?`)) return;
+      snapshot(state, `Antes de quitar las hechas de «${l.name}»`);
       l.items = l.items.filter(x => !x.done);
       save(state);
       return render();
     }
     case 'list-delete': {
       const l = state.lists.find(x => x.id === el.dataset.l);
-      if (!confirm(`¿Borrar la lista "${l.name}" y todo lo que tiene? No se puede deshacer.`)) return;
+      if (!confirm(`¿Borrar la lista "${l.name}" y todo lo que tiene?`)) return;
+      snapshot(state, `Antes de borrar la lista «${l.name}»`);
       state.lists = state.lists.filter(x => x !== l);
       openList = null;
       save(state);
@@ -1409,7 +1424,8 @@ document.addEventListener('click', e => {
     case 'metric-clear': delete state.values[el.dataset.m]?.[d]; save(state); $sheet.close(); return render();
     case 'metric-delete': {
       const m = state.metrics.find(x => x.id === el.dataset.m);
-      if (!confirm(`¿Borrar "${m.name}" y todos sus valores? No se puede deshacer.`)) return;
+      if (!confirm(`¿Borrar "${m.name}" y todos sus valores?`)) return;
+      snapshot(state, `Antes de borrar la métrica «${m.name}»`);
       state.metrics = state.metrics.filter(x => x !== m);
       delete state.values[m.id];
       save(state);
@@ -1453,7 +1469,8 @@ document.addEventListener('click', e => {
     }
     case 'goal-delete': {
       const g = state.goals.find(x => x.id === el.dataset.g);
-      if (!confirm(`¿Borrar la meta "${g.title}"? No se puede deshacer.`)) return;
+      if (!confirm(`¿Borrar la meta "${g.title}"?`)) return;
+      snapshot(state, `Antes de borrar la meta «${g.title}»`);
       state.goals = state.goals.filter(x => x !== g);
       save(state);
       $sheet.close();
@@ -1461,7 +1478,8 @@ document.addEventListener('click', e => {
     }
     case 'delete': {
       const habit = state.habits.find(x => x.id === h);
-      if (!confirm(`¿Borrar "${habit.name}" y todo su historial? No se puede deshacer.`)) return;
+      if (!confirm(`¿Borrar "${habit.name}" y todo su historial?`)) return;
+      snapshot(state, `Antes de borrar el hábito «${habit.name}»`);
       state.habits = state.habits.filter(x => x.id !== h);
       delete state.done[h];
       state.goals.forEach(g => (g.habits = g.habits.filter(x => x !== h)));
@@ -1552,6 +1570,63 @@ function release() {
 }
 $sheet.addEventListener('pointerup', release);
 $sheet.addEventListener('pointercancel', release);
+
+// ---- Data protection
+const when = iso => new Date(iso).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+async function fillDataStatus() {
+  const box = document.getElementById('datastatus');
+  if (!box) return;
+  const persisted = await navigator.storage?.persisted?.().catch(() => false);
+  const kb = Math.round((localStorage.getItem('habysst')?.length ?? 0) / 1024);
+  const snaps = await listSnapshots();
+  if (!document.body.contains(box)) return;
+  box.innerHTML = `
+    <p class="${persisted ? '' : 'warn'}">${persisted
+      ? '<strong>Protegidos.</strong> El navegador no borrará tus datos para liberar espacio.'
+      : '<strong>Sin protección del navegador.</strong> Instala HabyssT en tu pantalla de inicio para que el navegador no pueda borrar tus datos, y exporta respaldos con frecuencia.'}</p>
+    <p class="muted small">Tus datos ocupan ${kb < 1 ? 'menos de 1' : kb} KB de unos 5.000 KB disponibles.</p>
+    <h3>Copias automáticas en este teléfono</h3>
+    <p class="muted small">Se guarda una al día y otra antes de importar, borrar o restaurar. Te protegen de errores, no de perder el teléfono.</p>
+    ${snaps.length ? `<ul class="log snaps">${snaps.map(x => `<li><span>${when(x.at)}<small>${esc(x.reason)}. ${plural(x.summary.habits, 'hábito', 'hábitos')}, ${x.summary.checks} registros, ${plural(x.summary.entries, 'día', 'días')} de diario.</small></span>
+      <button class="link" data-act="restore" data-k="${x.key}" data-at="${x.at}">Restaurar</button></li>`).join('')}</ul>` : '<p class="muted small">Todavía no hay copias. La primera se crea hoy en cuanto registres algo.</p>'}`;
+}
+
+async function restoreSnapshot(key, at) {
+  if (!confirm(`¿Volver a tus datos del ${when(at)}? Lo que tienes ahora se guarda antes como otra copia.`)) return;
+  try {
+    const next = await readSnapshot(key);
+    await snapshot(state, 'Antes de restaurar una copia');
+    state = next;
+    save(state);
+    render();
+    stamp('Restaurado');
+  } catch (e) {
+    alert(`No se pudo restaurar esa copia (${e.message}). Tus datos actuales no se han tocado.`);
+  }
+}
+
+// Another open tab saved: take its data instead of overwriting it with ours.
+addEventListener('storage', e => {
+  if (e.key !== 'habysst' || !e.newValue) return;
+  try { state = fromJSON(JSON.parse(e.newValue)); render(); } catch { /* the other tab wrote something unreadable: keep ours */ }
+});
+// Leaving the app (switching apps, locking the phone) writes any text still waiting to be saved.
+addEventListener('pagehide', () => pendingFlush?.());
+document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && pendingFlush?.());
+
+// Startup: ask the browser to keep our data, and recover from the second copy if the main one is gone or broken.
+if (hasData(state)) navigator.storage?.persist?.();
+const startProblem = loadProblem;
+if (startProblem) recover().then(s => {
+  if (!s) {
+    if (startProblem === 'corrupt') alert('Tus datos guardados estaban dañados y no hay copia interna. Si tienes un respaldo, impórtalo desde Ajustes.');
+    return;
+  }
+  state = s;
+  save(state);
+  render();
+  alert('Recuperamos tus datos desde la copia interna de este teléfono.');
+});
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 render(true);
