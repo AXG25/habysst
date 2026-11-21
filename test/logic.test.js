@@ -58,3 +58,22 @@ test('fromJSON rejects foreign files, defaults freq and round-trips data', () =>
   assert.deepEqual(cleanFreq({ type: 'days', days: [] }), DAILY);
   assert.deepEqual(cleanFreq({ type: 'weekly', times: 9 }), DAILY);
 });
+
+test('goal progress: numeric (also decreasing), steps, and pace against deadline', async () => {
+  const { goalProgress } = await import('../logic.js');
+  const base = { kind: 'number', start: 80, target: 70, log: [{ d: '2026-11-10', v: 75 }], steps: [], startDate: '2026-11-01', deadline: '2026-11-21' };
+  const p = goalProgress(base, d(10, 11)); // 10 of 20 days elapsed
+  assert.equal(p.pct, 0.5);
+  assert.equal(p.expected, 0.5);
+  assert.equal(p.daysLeft, 10);
+  assert.equal(goalProgress({ ...base, log: [{ d: '2026-11-10', v: 60 }] }, d(10, 11)).pct, 1); // clamped
+  const steps = goalProgress({ kind: 'steps', steps: [{ done: true }, { done: false }], deadline: null }, d(10, 11));
+  assert.deepEqual([steps.pct, steps.expected, steps.daysLeft], [0.5, null, null]);
+});
+
+test('cleanGoal drops unknown habits and invalid fields', async () => {
+  const { cleanGoal } = await import('../store.js');
+  assert.equal(cleanGoal({ id: 'g', title: '  ' }, new Set()), null);
+  const g = cleanGoal({ id: 'g', title: 'Correr', kind: 'x', target: 'a', habits: ['h1', 'zz'], deadline: '2026-13', status: 'weird' }, new Set(['h1']));
+  assert.deepEqual([g.kind, g.target, g.habits, g.deadline, g.status], ['number', 0, ['h1'], null, 'active']);
+});

@@ -86,3 +86,26 @@ export const monthRow = (y, m) => {
   const n = new Date(y, m + 1, 0).getDate();
   return Array.from({ length: 31 }, (_, i) => (i < n ? new Date(y, m, i + 1) : null));
 };
+
+const clamp01 = x => Math.min(1, Math.max(0, x));
+const dayDiff = (a, b) => Math.round((b - a) / 864e5); // rounding absorbs DST hours
+
+// Goal progress, plus where you should be by now when there is a deadline.
+export function goalProgress(g, now) {
+  let value, pct;
+  if (g.kind === 'steps') {
+    value = g.steps.filter(s => s.done).length;
+    pct = g.steps.length ? value / g.steps.length : 0;
+  } else {
+    value = g.log.at(-1)?.v ?? g.start;
+    pct = g.target === g.start ? 1 : (value - g.start) / (g.target - g.start); // works for decreasing targets too
+  }
+  let expected = null, daysLeft = null;
+  if (g.deadline) {
+    const start = parseYmd(g.startDate), end = parseYmd(g.deadline), today = startOfDay(now);
+    daysLeft = dayDiff(today, end);
+    const total = dayDiff(start, end);
+    expected = total > 0 ? clamp01(dayDiff(start, today) / total) : 1;
+  }
+  return { value, pct: clamp01(pct), expected, daysLeft };
+}

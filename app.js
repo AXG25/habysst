@@ -1,5 +1,5 @@
-import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow } from './logic.js';
-import { load, save, fromJSON, toJSON, cleanFreq, TONES } from './store.js';
+import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress } from './logic.js';
+import { load, save, fromJSON, toJSON, cleanFreq, cleanGoal, TONES } from './store.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -13,6 +13,7 @@ let yearFilter = 'all';
 
 const $view = document.getElementById('view');
 const $sheet = document.getElementById('sheet');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const esc = s => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const setOf = h => (state.done[h.id] ??= new Set());
 const cap = s => s[0].toUpperCase() + s.slice(1);
@@ -74,11 +75,11 @@ function viewHoy() {
   const due = state.habits.filter(h => dueOn(h, now));
   const rest = state.habits.filter(h => !dueOn(h, now));
   const doneToday = due.filter(h => setOf(h).has(key)).length;
-  const item = h => {
+  const item = (h, i) => {
     const on = setOf(h).has(key);
     const { cur, best } = info(h);
     const week = h.freq.type === 'weekly' ? `${weekCount(h, now)} de ${h.freq.times} esta semana. ` : '';
-    return `<li><button class="habit panel${on ? ' on' : ''}" data-act="toggle" data-h="${h.id}" data-d="${key}" aria-pressed="${on}">
+    return `<li style="--r:${i}"><button class="habit panel${on ? ' on' : ''}" data-act="toggle" data-h="${h.id}" data-d="${key}" aria-pressed="${on}">
       <span class="check" aria-hidden="true"></span>
       <span class="hname">${esc(h.name)}</span>
       <span class="hmeta">${week}Racha ${unit(h, cur)}. Mejor: ${best}</span>
@@ -104,7 +105,7 @@ function viewMes() {
 
   return head + `<div class="cal panel">
     <div class="wd">${WD.map(d => `<span>${d}</span>`).join('')}</div>
-    ${weeks.map(w => `<div class="wk" style="--n:${hs.length}">
+    ${weeks.map((w, r) => `<div class="wk" style="--n:${hs.length};--r:${r}">
       ${w.map((d, i) => {
         if (!d) return `<span class="day pad" style="grid-column:${i + 1}"></span>`;
         const k = ymd(d);
@@ -136,7 +137,7 @@ function viewAno() {
       const voids = days.map((d, i) => (d ? '' : `<i class="void" style="grid-column:${i + 2}"></i>`)).join('');
       const future = days.findIndex(d => d && ymd(d) > t);
       const fut = future >= 0 ? `<i class="future" style="grid-column:${future + 2}/-1"></i>` : '';
-      return `<button class="yr" data-act="month" data-m="${m}" style="--n:${hs.length};--lane:${lane}px" aria-label="Ver ${name}">
+      return `<button class="yr" data-act="month" data-m="${m}" style="--n:${hs.length};--lane:${lane}px;--r:${m}" aria-label="Ver ${name}">
         <span class="ml">${name.slice(0, 3)}</span><i class="ticks"></i>${voids}${fut}
         ${hs.map((h, j) => bars(days, h, j + 1, 1)).join('')}</button>`;
     }).join('')}
@@ -160,10 +161,197 @@ function viewHabitos() {
   </section>`;
 }
 
-const views = { hoy: viewHoy, mes: viewMes, ano: viewAno, habitos: viewHabitos };
 
-function render() {
+const MAX_GOALS = 3;
+const activeGoals = () => state.goals.filter(g => g.status === 'active');
+const fmt = n => n.toLocaleString('es', { maximumFractionDigits: 2 });
+const fmtDate = k => parseYmd(k).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+
+const u = g => (g.unit ? ` ${esc(g.unit)}` : '');
+
+function goalSummary(g) {
+  const p = goalProgress(g, new Date());
+  const amount = g.kind === 'steps'
+    ? `${p.value} de ${plural(g.steps.length, 'paso', 'pasos')}`
+    : g.target < g.start
+      ? `${fmt(p.value)}${u(g)}, objetivo ${fmt(g.target)}${u(g)}`
+      : `${fmt(p.value)} de ${fmt(g.target)}${u(g)}`;
+  let pace = '';
+  if (p.daysLeft !== null && g.status === 'active') {
+    if (p.daysLeft < 0) pace = `Venció hace ${plural(-p.daysLeft, 'día', 'días')}.`;
+    else {
+      const diff = Math.round((p.pct - p.expected) * 100);
+      const left = p.daysLeft === 0 ? 'Vence hoy' : `Quedan ${plural(p.daysLeft, 'día', 'días')}`;
+      pace = `${left}. ${diff >= 0 ? `Vas a ritmo${diff > 0 ? `, ${diff}% por delante` : ''}.` : `Vas ${-diff}% por detrás.`}`;
+    }
+  }
+  return { ...p, amount, pace, pctLabel: `${Math.round(p.pct * 100)}%` };
+}
+
+const progressBar = s =>
+  `<div class="pbar" role="progressbar" aria-label="Progreso" aria-valuenow="${Math.round(s.pct * 100)}" aria-valuemin="0" aria-valuemax="100">
+    <i style="--p:${s.pct}"></i>${s.expected !== null ? `<b style="left:${(s.expected * 100).toFixed(1)}%"></b>` : ''}</div>`;
+
+const ifThen = (a, b) => (a || b ? `<p class="plan">Si ${esc(a || '…')}, entonces ${esc(b || '…')}.</p>` : '');
+
+function viewMetas() {
+  const act = activeGoals(), closed = state.goals.filter(g => g.status !== 'active');
+  return header('Metas', `${act.length} de ${MAX_GOALS} activas`) +
+    (act.length
+      ? `<ul class="goals">${act.map((g, i) => {
+          const s = goalSummary(g);
+          return `<li style="--r:${i}"><button class="goal panel" data-act="goal" data-g="${g.id}">
+            <span class="gtitle">${esc(g.title)}</span>
+            ${progressBar(s)}
+            <span class="gline"><b>${s.pctLabel}</b> ${s.amount}</span>
+            ${s.pace ? `<span class="hmeta">${s.pace}</span>` : ''}
+            ${ifThen(g.plan.when, g.plan.then)}
+          </button></li>`;
+        }).join('')}</ul>`
+      : `<section class="empty panel"><p>Todavía no tienes metas.</p></section>`) +
+    (act.length < MAX_GOALS
+      ? `<button class="btn wide" data-act="goal-new">Crear meta</button>`
+      : `<p class="muted">Tienes ${MAX_GOALS} metas activas, el máximo. Logra o abandona una para crear otra.</p>`) +
+    (closed.length
+      ? `<details class="closed"><summary>Cerradas (${closed.length})</summary><ul class="manage">${closed.map(g => `<li class="panel">
+          <span>${esc(g.title)}<small>${g.status === 'done' ? 'Lograda' : 'Abandonada'}${g.closedAt ? ` el ${fmtDate(g.closedAt)}` : ''}</small></span>
+          <button class="link" data-act="goal" data-g="${g.id}">Ver</button></li>`).join('')}</ul></details>`
+      : '');
+}
+
+function openGoal(id) {
+  const draw = () => {
+    const g = state.goals.find(x => x.id === id);
+    if (!g) return $sheet.close();
+    const s = goalSummary(g), active = g.status === 'active';
+    const linked = state.habits.filter(h => g.habits.includes(h.id));
+    $sheet.innerHTML = `<form method="dialog" class="gdetail">
+      <h2 tabindex="-1" autofocus>${esc(g.title)}</h2>
+      ${g.why ? `<p class="why">${esc(g.why)}</p>` : ''}
+      ${progressBar(s)}
+      <p class="gline"><b>${s.pctLabel}</b> ${s.amount}</p>
+      ${s.pace ? `<p class="hmeta">${s.pace}</p>` : ''}
+      ${active && g.kind === 'number' ? `<div class="logrow">
+        <label class="field">Valor actual${g.unit ? ` (${esc(g.unit)})` : ''}<input name="v" type="number" step="any" inputmode="decimal" value="${s.value}"></label>
+        <button type="button" class="btn" data-act="goal-log" data-g="${g.id}">Registrar</button></div>` : ''}
+      ${g.kind === 'steps' ? `<ul class="habits">${g.steps.map((st, i) => `<li><button type="button" class="habit compact panel${st.done ? ' on' : ''}" data-act="goal-step" data-g="${g.id}" data-i="${i}" aria-pressed="${st.done}"${active ? '' : ' disabled'}>
+        <span class="check" aria-hidden="true"></span><span class="hname">${esc(st.text)}</span></button></li>`).join('')}</ul>` : ''}
+      ${g.plan.when || g.plan.then ? `<h3>Plan</h3>${ifThen(g.plan.when, g.plan.then)}` : ''}
+      ${g.obstacle.if || g.obstacle.then ? `<h3>Obstáculo previsto</h3>${ifThen(g.obstacle.if, g.obstacle.then)}` : ''}
+      ${linked.length ? `<h3>Hábitos vinculados</h3><ul class="legend">${linked.map(h => `<li><i class="sw t${h.tone}"></i><span>${esc(h.name)}</span><b>${unit(h, info(h).cur)}</b><small>Racha actual. Mejor: ${info(h).best}</small></li>`).join('')}</ul>` : ''}
+      ${g.kind === 'number' && g.log.length ? `<h3>Registro</h3><ul class="log">${g.log.slice(-5).reverse().map(e => `<li><span>${fmtDate(e.d)}</span><b>${fmt(e.v)}</b></li>`).join('')}</ul>` : ''}
+      <div class="row">${active
+        ? `<button type="button" class="btn" data-act="goal-close" data-g="${g.id}" data-s="done">Marcar como lograda</button>
+           <button type="button" class="btn ghost" data-act="goal-edit" data-g="${g.id}">Editar</button>`
+        : `<button type="button" class="btn ghost" data-act="goal-reopen" data-g="${g.id}">Reactivar</button>`}
+        <button class="btn ghost">Cerrar</button></div>
+      ${active
+        ? `<button type="button" class="link danger" data-act="goal-close" data-g="${g.id}" data-s="dropped">Abandonar meta</button>`
+        : `<button type="button" class="link danger" data-act="goal-delete" data-g="${g.id}">Borrar meta</button>`}
+    </form>`;
+  };
+  $sheet.redraw = draw;
+  draw();
+  if (!$sheet.open) $sheet.showModal();
+}
+
+function logGoal(id) {
+  const g = state.goals.find(x => x.id === id);
+  const v = parseFloat($sheet.querySelector('input[name="v"]').value);
+  if (!Number.isFinite(v)) return alert('Escribe un número.');
+  const d = ymd(new Date());
+  if (g.log.at(-1)?.d === d) g.log.at(-1).v = v; // one entry per day; the last one wins
+  else g.log.push({ d, v });
+  save(state);
+  $sheet.redraw();
+  $sheet.querySelector('.pbar')?.classList.add('pop');
+  render();
+}
+
+function openGoalEditor(g) {
+  const kind = g?.kind ?? 'number';
+  const val = x => (x ? esc(String(x)) : '');
+  const radio = (v, label) => `<label class="opt"><input type="radio" name="kind" value="${v}"${kind === v ? ' checked' : ''}><span>${label}</span></label>`;
+  $sheet.redraw = null;
+  $sheet.innerHTML = `<form id="geditor">
+    <h2${g ? ' tabindex="-1" autofocus' : ''}>${g ? 'Editar meta' : 'Nueva meta'}</h2>
+    <label class="field">Meta<input name="title" required maxlength="80" value="${val(g?.title)}" placeholder="Correr una media maratón" autocomplete="off"></label>
+    <label class="field">Por qué te importa<textarea name="why" rows="2" maxlength="500" placeholder="Opcional">${val(g?.why)}</textarea></label>
+    <label class="field">Fecha límite<input name="deadline" type="date" value="${g?.deadline ?? ''}"></label>
+    <fieldset class="freq"><legend>Cómo se mide</legend>
+      <div class="opts">${radio('number', 'Con un número')}${radio('steps', 'Con pasos')}</div>
+      <div class="when-number nums">
+        <label class="field">Valor inicial<input name="start" type="number" step="any" inputmode="decimal" value="${g?.start ?? 0}"></label>
+        <label class="field">Objetivo<input name="target" type="number" step="any" inputmode="decimal" value="${g && g.kind === 'number' ? g.target : ''}"></label>
+        <label class="field">Unidad<input name="unit" maxlength="20" value="${val(g?.unit)}" placeholder="km"></label>
+      </div>
+      <label class="when-steps field">Pasos, uno por línea<textarea name="steps" rows="4" placeholder="Correr 5 km sin parar&#10;Correr 10 km&#10;Inscribirme en la carrera">${g ? esc(g.steps.map(x => x.text).join('\n')) : ''}</textarea></label>
+    </fieldset>
+    <fieldset><legend>Plan: cuándo y dónde actuarás</legend>
+      <label class="field">Si…<input name="when" maxlength="160" value="${val(g?.plan.when)}" placeholder="son las 7:00 y termino el café"></label>
+      <label class="field">entonces…<input name="then" maxlength="160" value="${val(g?.plan.then)}" placeholder="salgo a correr 30 minutos"></label>
+    </fieldset>
+    <fieldset><legend>Obstáculo previsto</legend>
+      <label class="field">Si…<input name="oif" maxlength="160" value="${val(g?.obstacle.if)}" placeholder="llueve o llego cansado"></label>
+      <label class="field">entonces…<input name="othen" maxlength="160" value="${val(g?.obstacle.then)}" placeholder="hago 15 minutos de cinta en casa"></label>
+    </fieldset>
+    ${state.habits.length ? `<fieldset><legend>Hábitos que la sostienen</legend><div class="opts">${state.habits.map(h => `<label class="opt"><input type="checkbox" name="habits" value="${h.id}"${g?.habits.includes(h.id) ? ' checked' : ''}><i class="sw t${h.tone}"></i><span>${esc(h.name)}</span></label>`).join('')}</div></fieldset>` : ''}
+    <div class="row"><button class="btn">${g ? 'Guardar' : 'Crear meta'}</button>
+    <button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
+  </form>`;
+  $sheet.querySelector('#geditor').onsubmit = e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const k = f.get('kind');
+    const n = x => (f.get(x) === '' ? NaN : parseFloat(f.get(x)));
+    const texts = f.get('steps').split('\n').map(t => t.trim()).filter(Boolean);
+    if (k === 'number' && (!Number.isFinite(n('start')) || !Number.isFinite(n('target')) || n('start') === n('target')))
+      return alert('Escribe un valor inicial y un objetivo distintos.');
+    if (k === 'steps' && !texts.length) return alert('Escribe al menos un paso.');
+    const prevDone = new Set(g?.steps.filter(x => x.done).map(x => x.text));
+    const next = cleanGoal({
+      id: g?.id ?? crypto.randomUUID(),
+      title: f.get('title'),
+      why: f.get('why'),
+      kind: k,
+      unit: f.get('unit'),
+      start: n('start'),
+      target: n('target'),
+      log: g?.log ?? [],
+      steps: texts.map(text => ({ text, done: prevDone.has(text) })),
+      plan: { when: f.get('when'), then: f.get('then') },
+      obstacle: { if: f.get('oif'), then: f.get('othen') },
+      habits: f.getAll('habits'),
+      startDate: g?.startDate ?? ymd(new Date()),
+      deadline: f.get('deadline') || null,
+      status: g?.status ?? 'active',
+      closedAt: g?.closedAt ?? null,
+    }, new Set(state.habits.map(h => h.id)));
+    if (!next) return alert('Escribe el nombre de la meta.');
+    if (next.deadline && next.deadline < next.startDate) return alert('La fecha límite no puede ser anterior al inicio de la meta.');
+    if (g) Object.assign(g, next);
+    else state.goals.push(next);
+    save(state);
+    $sheet.close();
+    render();
+  };
+  $sheet.showModal();
+}
+
+// A hanko-style stamp for the rare moment a goal is achieved.
+function stamp(text) {
+  const el = Object.assign(document.createElement('div'), { className: 'stamp', textContent: text });
+  el.setAttribute('role', 'status');
+  el.addEventListener('animationend', () => el.remove());
+  document.body.append(el);
+}
+
+const views = { hoy: viewHoy, mes: viewMes, ano: viewAno, metas: viewMetas, habitos: viewHabitos };
+
+// `enter` replays the ink-stroke reveal; only on navigation, never on a check-in.
+function render(enter = false) {
   cache = new Map();
+  $view.classList.toggle('enter', enter && !reduceMotion.matches);
   $view.innerHTML = views[tab]();
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'));
 }
@@ -279,29 +467,72 @@ document.addEventListener('click', e => {
   if (el.dataset.tab) {
     tab = el.dataset.tab;
     if (tab === 'mes' || tab === 'ano') cursor = new Date();
-    return render();
+    return render(true);
   }
   const { act, h, d } = el.dataset;
   const step = tab === 'ano' ? 12 : 1;
   switch (act) {
-    case 'toggle':
+    case 'toggle': {
       toggle(h, d);
-      $sheet.open && $sheet.redraw ? $sheet.redraw() : null;
-      return render();
+      if ($sheet.open && $sheet.redraw) $sheet.redraw();
+      render();
+      // Animate only the check-in that changed, not the whole list.
+      document.querySelectorAll(`[data-act="toggle"][data-h="${h}"][data-d="${d}"]`).forEach(b => b.classList.add('pop'));
+      return;
+    }
     case 'day': return openDay(d);
-    case 'prev': cursor = new Date(cursor.getFullYear(), cursor.getMonth() - step, 1); return render();
-    case 'next': cursor = new Date(cursor.getFullYear(), cursor.getMonth() + step, 1); return render();
-    case 'month': cursor = new Date(cursor.getFullYear(), +el.dataset.m, 1); tab = 'mes'; return render();
+    case 'prev': cursor = new Date(cursor.getFullYear(), cursor.getMonth() - step, 1); return render(true);
+    case 'next': cursor = new Date(cursor.getFullYear(), cursor.getMonth() + step, 1); return render(true);
+    case 'month': cursor = new Date(cursor.getFullYear(), +el.dataset.m, 1); tab = 'mes'; return render(true);
     case 'yf': yearFilter = h; return render();
     case 'new': return openEditor();
     case 'edit': return openEditor(state.habits.find(x => x.id === h));
     case 'close': return $sheet.close();
     case 'export': return exportBackup();
+    case 'goal': return openGoal(el.dataset.g);
+    case 'goal-new': return openGoalEditor();
+    case 'goal-edit': return openGoalEditor(state.goals.find(g => g.id === el.dataset.g));
+    case 'goal-log': return logGoal(el.dataset.g);
+    case 'goal-step': {
+      const g = state.goals.find(x => x.id === el.dataset.g);
+      const st = g.steps[+el.dataset.i];
+      st.done = !st.done;
+      save(state);
+      $sheet.redraw();
+      render();
+      if (st.done) $sheet.querySelector(`[data-act="goal-step"][data-i="${el.dataset.i}"]`)?.classList.add('pop');
+      return;
+    }
+    case 'goal-close': {
+      const g = state.goals.find(x => x.id === el.dataset.g);
+      Object.assign(g, { status: el.dataset.s, closedAt: ymd(new Date()) });
+      save(state);
+      $sheet.close();
+      render();
+      if (g.status === 'done') stamp('Lograda');
+      return;
+    }
+    case 'goal-reopen': {
+      if (activeGoals().length >= MAX_GOALS) return alert(`Ya tienes ${MAX_GOALS} metas activas. Cierra una antes de reactivar esta.`);
+      Object.assign(state.goals.find(x => x.id === el.dataset.g), { status: 'active', closedAt: null });
+      save(state);
+      $sheet.redraw();
+      return render();
+    }
+    case 'goal-delete': {
+      const g = state.goals.find(x => x.id === el.dataset.g);
+      if (!confirm(`¿Borrar la meta "${g.title}"? No se puede deshacer.`)) return;
+      state.goals = state.goals.filter(x => x !== g);
+      save(state);
+      $sheet.close();
+      return render();
+    }
     case 'delete': {
       const habit = state.habits.find(x => x.id === h);
       if (!confirm(`¿Borrar "${habit.name}" y todo su historial? No se puede deshacer.`)) return;
       state.habits = state.habits.filter(x => x.id !== h);
       delete state.done[h];
+      state.goals.forEach(g => (g.habits = g.habits.filter(x => x !== h)));
       save(state);
       $sheet.close();
       return render();
@@ -317,4 +548,4 @@ document.addEventListener('change', e => {
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && !$sheet.open && render());
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
-render();
+render(true);
