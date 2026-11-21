@@ -411,8 +411,6 @@ dialog[open]::backdrop { background: rgb(0 0 0 / 0.45); }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .seg button:active { transform: scale(0.97); }
 
-.checkin { padding: 12px 14px 6px; margin-bottom: 16px; }
-.checkin .link { margin-top: 4px; }
 .scales { display: grid; gap: 10px; margin: 4px 0 8px; }
 .scale { display: grid; grid-template-columns: 4.6rem 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; }
 .scale-l { font-weight: 700; font-size: 0.9rem; }
@@ -565,10 +563,6 @@ body.zen-on { overflow: hidden; }
   transform: rotate(-3deg);
 }
 .sec { margin: 0 0 26px; }
-.sec-head { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 10px; margin-bottom: 10px; }
-.sec-head h2, .checkin summary h2 { margin: 0; font: 400 1.35rem/1.2 var(--display); }
-.sec-head .hmeta { grid-row: 2; }
-.sec-act { grid-row: 1 / 3; grid-column: 2; display: flex; align-items: center; gap: 6px; }
 .sec-act .link { font-weight: 700; }
 .add {
   width: 40px; height: 40px;
@@ -584,22 +578,6 @@ body.zen-on { overflow: hidden; }
 .habit.editing .link { grid-column: 3; grid-row: 1 / 3; font-weight: 700; }
 .metric.editing .link { font-weight: 700; }
 
-.checkin { padding: 0; margin: 0 0 26px; }
-.checkin summary {
-  display: grid; grid-template-columns: 1fr auto; column-gap: 10px; align-items: center;
-  list-style: none; cursor: pointer; margin-bottom: 10px;
-}
-.checkin summary::-webkit-details-marker { display: none; }
-.checkin summary::after {
-  content: ''; grid-column: 2; grid-row: 1 / 3;
-  width: 12px; height: 12px; margin: 0 12px;
-  border: solid var(--ink); border-width: 0 3px 3px 0;
-  transform: rotate(45deg);
-  transition: transform 200ms var(--ease-out);
-}
-.checkin[open] summary::after { transform: rotate(-135deg); }
-.checkin summary .hmeta { grid-row: 2; }
-.checkin-body { padding: 12px 14px 6px; }
 
 /* Signature */
 .signature { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; align-items: center; margin: 40px 0 8px; padding-top: 20px; border-top: 2px solid var(--ink); }
@@ -618,3 +596,70 @@ body.zen-on { overflow: hidden; }
 }
 #metricf h3 { margin: 22px 0 6px; font-size: 1rem; }
 .log b small { font-family: var(--body); font-weight: 400; color: var(--muted); }
+
+/* Folding sections */
+.fold > summary {
+  display: grid; grid-template-columns: 1fr auto auto; column-gap: 8px; align-items: center;
+  list-style: none; cursor: pointer; margin-bottom: 10px;
+  -webkit-user-select: none; user-select: none;
+}
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary h2 { margin: 0; font: 400 1.35rem/1.2 var(--display); }
+.fold > summary .hmeta { grid-row: 2; }
+.sec-act { grid-column: 2; grid-row: 1 / 3; display: flex; align-items: center; gap: 6px; }
+.sec-act .link { font-weight: 700; }
+.chev {
+  grid-column: 3; grid-row: 1 / 3;
+  width: 11px; height: 11px; margin: 0 10px 4px;
+  border: solid var(--ink); border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
+  transition: transform 260ms var(--ease-out);
+}
+.fold[open] > summary .chev { transform: translateY(4px) rotate(-135deg); }
+.checkin-body { padding: 12px 14px 6px; }
+.checkin-body .link { margin-top: 4px; }
+/* Height animates where the browser can size to auto (Chrome); elsewhere it just fades in. */
+:root { interpolate-size: allow-keywords; }
+.fold::details-content {
+  block-size: 0; overflow: clip;
+  transition: block-size 340ms var(--ease-out), content-visibility 340ms allow-discrete;
+}
+.fold[open]::details-content { block-size: auto; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(-6px); } }
+.fold[open] > .fold-body { animation: fade-up 280ms var(--ease-out) both; }
+.enter .fold[open] > .fold-body { animation: none; } /* page entrances already move */
+
+/* Hero title fits one line next to the HabyssT mark */
+.hero h1.fit { white-space: nowrap; font-size: min(3rem, calc((min(100vw, 560px) - 120px) / (var(--len) * 0.69))); }
+.brand { font-size: 0.66rem; padding: 3px 5px 4px; border-width: 1.5px; margin-top: 4px; flex: none; }
+
+/* Spacing fixes */
+.empty.panel + .btn, .empty.panel + .muted { margin-top: 14px; }
+.nums .field input { width: 100%; min-width: 0; }
+
+/* Page transitions: content slides the way you moved, the tab bar stays still */
+#view { view-transition-name: view; }
+.tabs { view-transition-name: tabs; }
+:root { --vt-x: 0px; }
+:root[data-dir="fwd"] { --vt-x: 32px; }
+:root[data-dir="back"] { --vt-x: -32px; }
+::view-transition-group(view) { animation-duration: 340ms; animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+::view-transition-old(view) { animation: vt-out 160ms cubic-bezier(0.23, 1, 0.32, 1) both; }
+::view-transition-new(view) { animation: vt-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both; }
+@keyframes vt-out { to { opacity: 0; transform: translateX(calc(var(--vt-x) * -1)); } }
+@keyframes vt-in { from { opacity: 0; transform: translateX(var(--vt-x)); } }
+/* Theme change: one circle reveal of the whole screen instead of per-part slides */
+:root[data-dir="theme"] #view, :root[data-dir="theme"] .tabs { view-transition-name: none; }
+:root[data-dir="theme"]::view-transition-old(root), :root[data-dir="theme"]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+
+/* Sheet handle */
+.grab { height: 22px; margin-bottom: -14px; display: grid; place-items: center; touch-action: none; cursor: grab; }
+.grab::after { content: ''; width: 44px; height: 5px; border-radius: 99px; background: var(--rule); }
+#sheet > form > h2 { touch-action: none; }
+dialog form { padding-top: 16px; }
+
+/* Check-in: today's segment of the strip draws in */
+.pop.on .strip .bar:last-child { animation: ink 360ms var(--ease-out) both; }
+
+/* Tab bar: the active tab is pressed ink; it settles in instead of snapping */
+.tabs button { transition: transform 160ms var(--ease-out), background-color 200ms ease, color 200ms ease; }

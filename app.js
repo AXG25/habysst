@@ -61,7 +61,7 @@ function bars(days, h, row, colOffset = 0) {
 
 const header = (title, sub, nav = '', brand = false) =>
   `<header class="hero">${nav ? `<button class="nav" data-act="prev" aria-label="Anterior">‹</button>` : ''}
-    <div><h1>${title}</h1><p>${sub}</p></div>
+    <div><h1${brand ? ` class="fit" style="--len:${title.length}"` : ''}>${title}</h1><p>${sub}</p></div>
     ${nav ? `<button class="nav" data-act="next" aria-label="Siguiente">›</button>` : ''}
     ${brand ? `<span class="brand" aria-label="HabyssT">HabyssT</span>` : ''}</header>`;
 
@@ -70,12 +70,17 @@ const ui = (() => { try { return JSON.parse(localStorage.getItem('habysst:ui')) 
 const setUi = patch => { Object.assign(ui, patch); try { localStorage.setItem('habysst:ui', JSON.stringify(ui)); } catch {} };
 let editMode = null; // 'habits' | 'metrics' while editing from Hoy
 
-const sectionHead = (title, kind, note = '') => {
+ui.closed ??= { checkin: !!ui.checkinClosed };
+const secActions = kind => {
   const has = kind === 'habits' ? state.habits.length : state.metrics.length;
-  return `<div class="sec-head"><h2>${title}</h2>${note ? `<span class="hmeta">${note}</span>` : ''}
-    <div class="sec-act">${has ? `<button class="link" data-act="editmode" data-k="${kind}" aria-pressed="${editMode === kind}">${editMode === kind ? 'Listo' : 'Editar'}</button>` : ''}
-    <button class="add" data-act="${kind === 'habits' ? 'new' : 'metric-new'}" aria-label="${kind === 'habits' ? 'Añadir hábito' : 'Añadir métrica'}">+</button></div></div>`;
+  return `${has ? `<button class="link" data-act="editmode" data-k="${kind}" aria-pressed="${editMode === kind}">${editMode === kind ? 'Listo' : 'Editar'}</button>` : ''}
+    <button class="add" data-act="${kind === 'habits' ? 'new' : 'metric-new'}" aria-label="${kind === 'habits' ? 'Añadir hábito' : 'Añadir métrica'}">+</button>`;
 };
+// A section that folds; whether it is open is remembered per device.
+const fold = (id, title, note, actions, body) =>
+  `<details class="fold sec" id="fold-${id}"${ui.closed[id] ? '' : ' open'}>
+    <summary><h2>${title}</h2>${note ? `<span class="hmeta">${note}</span>` : ''}<span class="sec-act">${actions}</span><i class="chev" aria-hidden="true"></i></summary>
+    <div class="fold-body">${body}</div></details>`;
 
 const emptyState = `<section class="empty panel">
   <p>Todavía no tienes hábitos.</p>
@@ -84,10 +89,10 @@ const emptyState = `<section class="empty panel">
 function viewHoy() {
   const now = new Date(), key = ymd(now);
   const head = header(`${DAYS[now.getDay()]} ${now.getDate()}`, `${cap(MONTHS[now.getMonth()])} ${now.getFullYear()}`, '', true);
-  const metricsSec = `<section class="sec">${sectionHead('Métricas', 'metrics')}
-    ${state.metrics.length ? metricRows(key, editMode === 'metrics') : `<p class="muted">Añade algo que quieras medir con un número: peso, páginas leídas, dinero ahorrado.</p>`}</section>`;
+  const metricsSec = fold('metrics', 'Métricas', '', secActions('metrics'),
+    state.metrics.length ? metricRows(key, editMode === 'metrics') : `<p class="muted">Añade algo que quieras medir con un número: peso, páginas leídas, dinero ahorrado.</p>`);
   const top = head + reviewNotice(now) + (state.timer ? focusBox(key) : '');
-  if (!state.habits.length) return top + `<section class="sec">${sectionHead('Hábitos', 'habits')}${emptyState}</section>` + checkIn(key) + metricsSec + focusBox(key);
+  if (!state.habits.length) return top + fold('habits', 'Hábitos', '', secActions('habits'), emptyState) + checkIn(key) + metricsSec + focusBox(key);
 
   const strip = Array.from({ length: 14 }, (_, i) => addDays(now, i - 13));
   const due = state.habits.filter(h => dueOn(h, now));
@@ -111,9 +116,9 @@ function viewHoy() {
     ? `<button class="note" data-act="export">${daysSince === null ? 'Aún no tienes respaldo.' : `Último respaldo hace ${daysSince} días.`} Exportar ahora</button>`
     : '';
 
-  return top + backupNote + `<section class="sec">${sectionHead('Hábitos', 'habits', `${doneToday} de ${due.length} hechos`)}
+  return top + backupNote + fold('habits', 'Hábitos', `${doneToday} de ${due.length} hechos`, secActions('habits'), `
     <ul class="habits">${due.map(item).join('')}</ul>
-    ${rest.length ? `<h3 class="sub-sm">Hoy no toca</h3><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}</section>
+    ${rest.length ? `<h3 class="sub-sm">Hoy no toca</h3><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}`) + `
   ${checkIn(key)}
   ${metricsSec}
   ${state.timer ? '' : focusBox(key)}`;
@@ -409,10 +414,8 @@ function checkIn(key) {
   const written = e?.text || Object.keys(e?.answers ?? {}).length;
   const sm = sleepMins(e?.bed, e?.wake);
   const summary = [e?.mood && `Ánimo: ${LEVELS[e.mood - 1].toLowerCase()}`, e?.energy && `Energía: ${LEVELS[e.energy - 1].toLowerCase()}`, sm && `Sueño: ${dur(sm)}`].filter(Boolean).join('. ') || 'Sin registrar todavía';
-  return `<details class="checkin sec" id="checkin"${ui.checkinClosed ? '' : ' open'}>
-    <summary><h2>Ánimo, energía y sueño</h2><span class="hmeta">${summary}</span></summary>
-    <div class="panel checkin-body">${scales(key)}${sleepLine(key)}
-    <button class="link" data-act="entry" data-d="${key}">${written ? 'Seguir escribiendo' : 'Escribir en el diario'}</button></div></details>`;
+  return fold('checkin', 'Ánimo, energía y sueño', summary, '', `<div class="panel checkin-body">${scales(key)}${sleepLine(key)}
+    <button class="link" data-act="entry" data-d="${key}">${written ? 'Seguir escribiendo' : 'Escribir en el diario'}</button></div>`);
 }
 
 function setEntry(key, patch) {
@@ -1156,10 +1159,11 @@ document.addEventListener('click', e => {
     if (e.target === $sheet) $sheet.close(); // tap on backdrop
     return;
   }
+  if (el.tagName === 'BUTTON' && el.closest('summary')) e.preventDefault();
   if (el.dataset.tab) {
-    tab = el.dataset.tab;
-    if (tab === 'rachas') cursor = new Date();
-    return render(true);
+    const next = el.dataset.tab;
+    if (next === tab) return;
+    return go(() => { tab = next; if (tab === 'rachas') cursor = new Date(); render(true); }, TABS.indexOf(next) > TABS.indexOf(tab) ? 'fwd' : 'back');
   }
   const { act, h, d } = el.dataset;
   const step = calMode === 'ano' ? 12 : 1;
@@ -1170,22 +1174,28 @@ document.addEventListener('click', e => {
       render();
       // Animate only the check-in that changed, not the whole list.
       document.querySelectorAll(`[data-act="toggle"][data-h="${h}"][data-d="${d}"]`).forEach(b => b.classList.add('pop'));
+      // Closing the last habit due today is worth a mark, once.
+      const now = new Date(), due = state.habits.filter(x => dueOn(x, now));
+      if (d === ymd(now) && setOf({ id: h }).has(d) && due.some(x => x.id === h) && due.every(x => setOf(x).has(d))) stamp('Día completo');
       return;
     }
     case 'day': return openDay(d);
-    case 'prev': cursor = new Date(cursor.getFullYear(), cursor.getMonth() - step, 1); return render(true);
-    case 'next': cursor = new Date(cursor.getFullYear(), cursor.getMonth() + step, 1); return render(true);
+    case 'prev': return go(() => { cursor = new Date(cursor.getFullYear(), cursor.getMonth() - step, 1); render(true); }, 'back');
+    case 'next': return go(() => { cursor = new Date(cursor.getFullYear(), cursor.getMonth() + step, 1); render(true); }, 'fwd');
     case 'month': cursor = new Date(cursor.getFullYear(), +el.dataset.m, 1); tab = 'rachas'; calMode = 'mes'; return render(true);
     case 'yf': yearFilter = h; return render();
-    case 'cal': calMode = el.dataset.m; return render(true);
-    case 'range': anaDays = +el.dataset.n; return render(true);
+    case 'cal': { const order = ['mes', 'ano', 'analisis'], m = el.dataset.m; return go(() => { calMode = m; render(true); }, order.indexOf(m) > order.indexOf(calMode) ? 'fwd' : 'back'); }
+    case 'range': return go(() => { anaDays = +el.dataset.n; render(true); }, anaDays < +el.dataset.n ? 'fwd' : 'back');
     case 'entry': return openEntry(d);
     case 'rate': return rate5(el.dataset.k, d, +el.dataset.v);
     case 'prompts': return savePrompts();
     case 'review': return openReview(d);
     case 'sleep': return openSleep(d);
-    case 'editmode': editMode = editMode === el.dataset.k ? null : el.dataset.k; return render();
-    case 'theme': setTheme(el.dataset.v); return render();
+    case 'editmode':
+      editMode = editMode === el.dataset.k ? null : el.dataset.k;
+      if (editMode) setUi({ closed: { ...ui.closed, [editMode]: false } });
+      return render();
+    case 'theme': return themeReveal(el.dataset.v, e.clientX, e.clientY);
     case 'focus-setup': return openFocusSetup();
     case 'focus-stop': return stopFocus(true);
     case 'focus-cancel': return stopFocus(false);
@@ -1281,7 +1291,67 @@ function setTheme(v) {
 if (ui.theme && ui.theme !== 'system') setTheme(ui.theme);
 
 // <details> toggle does not bubble, so listen in the capture phase.
-document.addEventListener('toggle', e => { if (e.target.id === 'checkin') setUi({ checkinClosed: !e.target.open }); }, true);
+document.addEventListener('toggle', e => {
+  if (e.target.id?.startsWith('fold-')) setUi({ closed: { ...ui.closed, [e.target.id.slice(5)]: !e.target.open } });
+}, true);
+
+// ---- Motion helpers
+const TABS = ['hoy', 'rachas', 'diario', 'metas', 'habitos'];
+// Page changes slide in the direction you moved; the tab bar stays put. Falls back to an instant swap.
+function go(update, dir = '') {
+  if (!document.startViewTransition || reduceMotion.matches) return update();
+  document.documentElement.dataset.dir = dir;
+  document.startViewTransition(update);
+}
+
+// The new theme spreads from the button you pressed.
+function themeReveal(v, x, y) {
+  const apply = () => { setTheme(v); render(); };
+  if (!document.startViewTransition || reduceMotion.matches) return apply();
+  document.documentElement.dataset.dir = 'theme';
+  const t = document.startViewTransition(apply);
+  t.ready.then(() => {
+    const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    document.documentElement.animate({ clipPath: [`circle(0 at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+      { duration: 560, easing: 'cubic-bezier(0.77, 0, 0.175, 1)', pseudoElement: '::view-transition-new(root)' });
+  });
+}
+
+// Sheets: drag the handle or title down to dismiss. A quick flick is enough; dragging up meets friction.
+new MutationObserver(() => {
+  if (!$sheet.querySelector(':scope > .grab')) $sheet.insertAdjacentHTML('afterbegin', '<div class="grab" aria-hidden="true"></div>');
+}).observe($sheet, { childList: true });
+let drag = null;
+$sheet.addEventListener('pointerdown', e => {
+  if (!e.target.closest('.grab, #sheet > form > h2')) return;
+  drag = { y: e.clientY, t: performance.now(), dy: 0 };
+  $sheet.setPointerCapture(e.pointerId);
+  $sheet.style.transition = 'none';
+});
+$sheet.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dy = e.clientY - drag.y;
+  drag.dy = dy > 0 ? dy : dy / 6;
+  $sheet.style.transform = `translateY(${drag.dy}px)`;
+});
+function release() {
+  if (!drag) return;
+  const { dy, t } = drag, v = dy / (performance.now() - t);
+  drag = null;
+  const done = ms => setTimeout(() => { $sheet.style.transition = ''; $sheet.style.transform = ''; }, ms);
+  if (dy > 120 || (dy > 24 && v > 0.11)) {
+    $sheet.style.transition = 'transform 200ms cubic-bezier(0.23, 1, 0.32, 1)';
+    $sheet.style.transform = 'translateY(100%)';
+    setTimeout(() => $sheet.close(), 200);
+    done(420);
+  } else {
+    $sheet.style.transition = 'transform 320ms cubic-bezier(0.32, 0.72, 0, 1)';
+    $sheet.style.transform = '';
+    done(320);
+  }
+}
+$sheet.addEventListener('pointerup', release);
+$sheet.addEventListener('pointercancel', release);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 render(true);
