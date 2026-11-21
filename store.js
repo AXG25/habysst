@@ -69,7 +69,7 @@ export function cleanGoal(g, habitIds) {
   };
 }
 
-const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, metrics: [], values: {}, lastBackup: null });
+const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, metrics: [], values: {}, focus: [], timer: null, lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
@@ -110,7 +110,14 @@ export function fromJSON(obj) {
     const src = obj.values?.[m.id];
     values[m.id] = Object.fromEntries(Object.entries(src && typeof src === 'object' ? src : {}).filter(([k, v]) => DATE.test(k) && num(v) !== null));
   }
-  return { version: 1, habits, done, goals, journal, prompts, reviews, metrics, values, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
+  const goalIds = new Set(goals.map(g => g.id));
+  const iso = x => (typeof x === 'string' && !Number.isNaN(Date.parse(x)) ? x : null);
+  const focus = Array.isArray(obj.focus)
+    ? obj.focus.filter(f => iso(f?.start) && num(f.mins) > 0).map(f => ({ start: f.start, mins: Math.min(Math.round(f.mins), 24 * 60), goal: goalIds.has(f.goal) ? f.goal : null }))
+    : [];
+  const t = obj.timer;
+  const timer = t && iso(t.start) ? { start: t.start, target: num(t.target) > 0 ? t.target : null, goal: goalIds.has(t.goal) ? t.goal : null } : null;
+  return { version: 1, habits, done, goals, journal, prompts, reviews, metrics, values, focus, timer, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
 }
 
 export const toJSON = s => ({
@@ -122,6 +129,8 @@ export const toJSON = s => ({
   reviews: s.reviews,
   metrics: s.metrics,
   values: s.values,
+  focus: s.focus,
+  timer: s.timer,
   done: Object.fromEntries(s.habits.map(h => [h.id, [...(s.done[h.id] ?? [])].sort()])),
   lastBackup: s.lastBackup,
 });

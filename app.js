@@ -70,7 +70,7 @@ const emptyState = `<section class="empty panel">
 function viewHoy() {
   const now = new Date(), key = ymd(now);
   const head = header(`${DAYS[now.getDay()]} ${now.getDate()}`, `${cap(MONTHS[now.getMonth()])} ${now.getFullYear()}`);
-  if (!state.habits.length) return head + reviewNotice(now) + checkIn(key) + emptyState;
+  if (!state.habits.length) return head + reviewNotice(now) + focusBox(key) + checkIn(key) + emptyState;
 
   const strip = Array.from({ length: 14 }, (_, i) => addDays(now, i - 13));
   const due = state.habits.filter(h => dueOn(h, now));
@@ -92,10 +92,11 @@ function viewHoy() {
     ? `<button class="note" data-act="export">${daysSince === null ? 'Aún no tienes respaldo.' : `Último respaldo hace ${daysSince} días.`} Exportar ahora</button>`
     : '';
 
-  return head + reviewNotice(now) + checkIn(key) + `<p class="count">${doneToday} de ${due.length} hechos hoy</p>${backupNote}
+  return head + reviewNotice(now) + (state.timer ? focusBox(key) : '') + checkIn(key) + `<p class="count">${doneToday} de ${due.length} hechos hoy</p>${backupNote}
   <ul class="habits">${due.map(item).join('')}</ul>
   ${rest.length ? `<h2 class="sub">Hoy no toca</h2><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}
-  ${state.metrics.length ? `<h2 class="sub">Métricas</h2>${metricRows(key)}` : ''}`;
+  ${state.metrics.length ? `<h2 class="sub">Métricas</h2>${metricRows(key)}` : ''}
+  ${state.timer ? '' : focusBox(key)}`;
 }
 
 const calSwitch = () => `<div class="seg" role="group" aria-label="Vista">
@@ -247,6 +248,7 @@ function openGoal(id) {
         <button type="button" class="btn" data-act="goal-log" data-g="${g.id}">Registrar</button></div>` : ''}
       ${g.kind === 'steps' ? `<ul class="habits">${g.steps.map((st, i) => `<li><button type="button" class="habit compact panel${st.done ? ' on' : ''}" data-act="goal-step" data-g="${g.id}" data-i="${i}" aria-pressed="${st.done}"${active ? '' : ' disabled'}>
         <span class="check" aria-hidden="true"></span><span class="hname">${esc(st.text)}</span></button></li>`).join('')}</ul>` : ''}
+      ${state.focus.some(f => f.goal === g.id) ? `<p class="hmeta">Enfoque dedicado: ${dur(focusIn('0000-00-00', '9999-12-31', g.id))}</p>` : ''}
       ${g.plan.when || g.plan.then ? `<h3>Plan</h3>${ifThen(g.plan.when, g.plan.then)}` : ''}
       ${g.obstacle.if || g.obstacle.then ? `<h3>Obstáculo previsto</h3>${ifThen(g.obstacle.if, g.obstacle.then)}` : ''}
       ${linked.length ? `<h3>Hábitos vinculados</h3><ul class="legend">${linked.map(h => `<li><i class="sw t${h.tone}"></i><span>${esc(h.name)}</span><b>${unit(h, info(h).cur)}</b><small>Racha actual. Mejor: ${info(h).best}</small></li>`).join('')}</ul>` : ''}
@@ -520,9 +522,11 @@ function reviewData(mon) {
     return `<li><span>${esc(g.title)}</span><b>${s.pctLabel}</b><small>${[moved, s.pace].filter(Boolean).join(' ')}</small></li>`;
   }).join('');
   const entries = Array.from({ length: 7 }, (_, i) => state.journal[ymd(addDays(mon, i))]).filter(Boolean).length;
+  const fw = focusIn(monKey, sun), fp = focusIn(ymd(prev), ymd(addDays(prev, 6)));
   return `${habits ? `<h3>Hábitos</h3><ul class="legend data">${habits}</ul>` : ''}
     ${feel ? `<h3>Cómo estuviste</h3><ul class="legend data">${feel}</ul>` : ''}
     ${goals ? `<h3>Metas</h3><ul class="legend data">${goals}</ul>` : ''}
+    ${fw || fp ? `<h3>Enfoque</h3><ul class="legend data"><li><span>Tiempo de enfoque</span><b>${fw ? dur(fw) : '0 h'}</b><small>Semana anterior: ${fp ? dur(fp) : '0 h'}</small></li></ul>` : ''}
     <p class="muted">${plural(entries, 'día', 'días')} con entrada en el diario.</p>`;
 }
 
@@ -571,7 +575,7 @@ function reviewList() {
 }
 
 // ---- Sleep (stored on the day you wake up)
-const dur = mins => `${Math.floor(mins / 60)} h${mins % 60 ? ` ${mins % 60} min` : ''}`;
+const dur = mins => (mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h${mins % 60 ? ` ${mins % 60} min` : ''}`);
 function sleepLine(key) {
   const e = entryOf(key), mins = sleepMins(e?.bed, e?.wake);
   const txt = mins ? `${dur(mins)}${e.sleep ? `. Calidad: ${LEVELS[e.sleep - 1].toLowerCase()}` : ''}` : 'Sin registrar';
@@ -669,6 +673,85 @@ function openMetricEditor(m) {
     render();
   };
   $sheet.showModal();
+}
+
+// ---- Focus sessions. The running timer lives in state, so it survives closing the app.
+const pad = n => String(n).padStart(2, '0');
+const clock = secs => { const a = Math.abs(secs); return `${a >= 3600 ? `${Math.floor(a / 3600)}:` : ''}${pad(Math.floor((a % 3600) / 60))}:${pad(a % 60)}`; };
+const focusOn = key => state.focus.filter(f => ymd(new Date(f.start)) === key).reduce((n, f) => n + f.mins, 0);
+const focusIn = (from, to, goal) => state.focus
+  .filter(f => { const k = ymd(new Date(f.start)); return k >= from && k <= to && (goal === undefined || f.goal === goal); })
+  .reduce((n, f) => n + f.mins, 0);
+
+function focusBox(key) {
+  const t = state.timer;
+  if (!t) {
+    const today = focusOn(key);
+    return `<section class="focusbox idle"><button class="btn ghost wide" data-act="focus-setup">Empezar sesión de enfoque</button>
+      ${today ? `<span class="hmeta">Hoy: ${dur(today)} de enfoque</span>` : ''}</section>`;
+  }
+  const goal = state.goals.find(g => g.id === t.goal);
+  return `<section class="focusbox running panel" aria-live="off">
+    <span class="hmeta" id="clocklabel">${t.target ? 'Tiempo restante' : 'Tiempo en sesión'}</span>
+    <span class="clock" id="clock">${clockText()}</span>
+    ${goal ? `<span class="hmeta">Para: ${esc(goal.title)}</span>` : ''}
+    <div class="row"><button class="btn" data-act="focus-stop">Terminar</button><button class="btn ghost" data-act="focus-cancel">Descartar</button></div>
+  </section>`;
+}
+
+function clockText() {
+  const t = state.timer, el = Math.floor((Date.now() - Date.parse(t.start)) / 1000);
+  if (!t.target) return clock(el);
+  const left = t.target * 60 - el;
+  return left >= 0 ? clock(left) : `+${clock(left)}`;
+}
+
+let buzzed = false;
+setInterval(() => {
+  const c = document.getElementById('clock');
+  if (!state.timer || !c) return;
+  c.textContent = clockText();
+  const over = state.timer.target && Date.now() - Date.parse(state.timer.start) >= state.timer.target * 60000;
+  if (over) {
+    document.getElementById('clocklabel').textContent = 'Tiempo cumplido. Termina cuando quieras.';
+    c.classList.add('over');
+    if (!buzzed) { buzzed = true; navigator.vibrate?.([200, 100, 200]); }
+  }
+}, 1000);
+
+function openFocusSetup() {
+  const goals = activeGoals();
+  const opt = (v, label, on) => `<label class="opt"><input type="radio" name="target" value="${v}"${on ? ' checked' : ''}><span>${label}</span></label>`;
+  $sheet.redraw = null;
+  $sheet.innerHTML = `<form id="focusf">
+    <h2>Sesión de enfoque</h2>
+    <fieldset><legend>Duración</legend><div class="opts">
+      ${opt(25, '25 minutos', true)}${opt(50, '50 minutos')}${opt(90, '90 minutos')}${opt('', 'Sin límite')}</div></fieldset>
+    ${goals.length ? `<fieldset><legend>¿Para qué meta?</legend><div class="opts">
+      <label class="opt"><input type="radio" name="goal" value="" checked><span>Ninguna en concreto</span></label>
+      ${goals.map(g => `<label class="opt"><input type="radio" name="goal" value="${g.id}"><span>${esc(g.title)}</span></label>`).join('')}</div></fieldset>` : ''}
+    <div class="row"><button class="btn">Empezar</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
+  </form>`;
+  $sheet.querySelector('#focusf').onsubmit = e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    state.timer = { start: new Date().toISOString(), target: +f.get('target') || null, goal: f.get('goal') || null };
+    buzzed = false;
+    save(state);
+    $sheet.close();
+    render();
+  };
+  $sheet.showModal();
+}
+
+function stopFocus(keep) {
+  const t = state.timer, mins = Math.round((Date.now() - Date.parse(t.start)) / 60000);
+  if (!keep && mins >= 1 && !confirm(`¿Descartar esta sesión de ${dur(mins)}? No se guardará.`)) return;
+  if (keep && mins < 1) alert('Las sesiones de menos de un minuto no se guardan.');
+  if (keep && mins >= 1) state.focus.push({ start: t.start, mins, goal: t.goal });
+  state.timer = null;
+  save(state);
+  render();
 }
 
 const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : viewAno()), diario: viewDiario, metas: viewMetas, habitos: viewHabitos };
@@ -818,6 +901,9 @@ document.addEventListener('click', e => {
     case 'prompts': return savePrompts();
     case 'review': return openReview(d);
     case 'sleep': return openSleep(d);
+    case 'focus-setup': return openFocusSetup();
+    case 'focus-stop': return stopFocus(true);
+    case 'focus-cancel': return stopFocus(false);
     case 'sleep-clear': setEntry(d, { bed: null, wake: null, sleep: null }); save(state); $sheet.close(); return render();
     case 'metric': return openMetric(el.dataset.m, d);
     case 'metric-new': return openMetricEditor();

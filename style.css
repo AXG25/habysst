@@ -469,3 +469,11 @@ dialog[open]::backdrop { background: rgb(0 0 0 / 0.45); }
 .metric b { font: 400 1.2rem/1 var(--display); }
 .metric .hmeta { grid-column: 1 / -1; }
 dialog .metrics { margin: 8px 0 12px; }
+
+/* Focus */
+.focusbox { display: grid; gap: 6px; justify-items: start; padding: 12px 14px; margin-bottom: 12px; }
+.focusbox.running { justify-items: stretch; border-width: 3px; }
+.clock { font: 400 clamp(3rem, 18vw, 4.5rem)/1 var(--display); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.clock.over { color: var(--hanko); }
+.focusbox .row { margin-top: 6px; }
+.focusbox.idle { margin: 24px 0 0; padding: 0; justify-items: stretch; }

@@ -118,3 +118,12 @@ test('sleep duration crosses midnight; entries keep only complete nights', async
   assert.deepEqual(s.metrics.map(m => m.id), ['m']);
   assert.deepEqual(s.values.m, { '2026-11-20': 77.1 });
 });
+
+test('focus sessions are validated and goal links dropped when the goal is gone', async () => {
+  const { fromJSON } = await import('../store.js');
+  const s = fromJSON({ version: 1, habits: [], done: {}, goals: [{ id: 'g', title: 'Meta' }],
+    focus: [{ start: '2026-11-21T08:00:00.000Z', mins: 25.4, goal: 'g' }, { start: 'nope', mins: 5 }, { start: '2026-11-21T09:00:00.000Z', mins: 10, goal: 'zz' }],
+    timer: { start: '2026-11-21T10:00:00.000Z', target: 50, goal: 'zz' } });
+  assert.deepEqual(s.focus.map(f => [f.mins, f.goal]), [[25, 'g'], [10, null]]);
+  assert.deepEqual(s.timer, { start: '2026-11-21T10:00:00.000Z', target: 50, goal: null });
+});
