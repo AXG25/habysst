@@ -59,10 +59,23 @@ function bars(days, h, row, colOffset = 0) {
   }).join('');
 }
 
-const header = (title, sub, nav = '') =>
+const header = (title, sub, nav = '', brand = false) =>
   `<header class="hero">${nav ? `<button class="nav" data-act="prev" aria-label="Anterior">‹</button>` : ''}
     <div><h1>${title}</h1><p>${sub}</p></div>
-    ${nav ? `<button class="nav" data-act="next" aria-label="Siguiente">›</button>` : ''}</header>`;
+    ${nav ? `<button class="nav" data-act="next" aria-label="Siguiente">›</button>` : ''}
+    ${brand ? `<span class="brand" aria-label="Habysst">HabyssT</span>` : ''}</header>`;
+
+// UI-only preferences for this device; never part of the backup.
+const ui = (() => { try { return JSON.parse(localStorage.getItem('habysst:ui')) ?? {}; } catch { return {}; } })();
+const setUi = patch => { Object.assign(ui, patch); try { localStorage.setItem('habysst:ui', JSON.stringify(ui)); } catch {} };
+let editMode = null; // 'habits' | 'metrics' while editing from Hoy
+
+const sectionHead = (title, kind, note = '') => {
+  const has = kind === 'habits' ? state.habits.length : state.metrics.length;
+  return `<div class="sec-head"><h2>${title}</h2>${note ? `<span class="hmeta">${note}</span>` : ''}
+    <div class="sec-act">${has ? `<button class="link" data-act="editmode" data-k="${kind}" aria-pressed="${editMode === kind}">${editMode === kind ? 'Listo' : 'Editar'}</button>` : ''}
+    <button class="add" data-act="${kind === 'habits' ? 'new' : 'metric-new'}" aria-label="${kind === 'habits' ? 'Añadir hábito' : 'Añadir métrica'}">+</button></div></div>`;
+};
 
 const emptyState = `<section class="empty panel">
   <p>Todavía no tienes hábitos.</p>
@@ -70,14 +83,19 @@ const emptyState = `<section class="empty panel">
 
 function viewHoy() {
   const now = new Date(), key = ymd(now);
-  const head = header(`${DAYS[now.getDay()]} ${now.getDate()}`, `${cap(MONTHS[now.getMonth()])} ${now.getFullYear()}`);
-  if (!state.habits.length) return head + reviewNotice(now) + focusBox(key) + checkIn(key) + emptyState;
+  const head = header(`${DAYS[now.getDay()]} ${now.getDate()}`, `${cap(MONTHS[now.getMonth()])} ${now.getFullYear()}`, '', true);
+  const metricsSec = `<section class="sec">${sectionHead('Métricas', 'metrics')}
+    ${state.metrics.length ? metricRows(key, editMode === 'metrics') : `<p class="muted">Añade algo que quieras medir con un número: peso, páginas leídas, dinero ahorrado.</p>`}</section>`;
+  const top = head + reviewNotice(now) + (state.timer ? focusBox(key) : '');
+  if (!state.habits.length) return top + `<section class="sec">${sectionHead('Hábitos', 'habits')}${emptyState}</section>` + checkIn(key) + metricsSec + focusBox(key);
 
   const strip = Array.from({ length: 14 }, (_, i) => addDays(now, i - 13));
   const due = state.habits.filter(h => dueOn(h, now));
   const rest = state.habits.filter(h => !dueOn(h, now));
   const doneToday = due.filter(h => setOf(h).has(key)).length;
   const item = (h, i) => {
+    if (editMode === 'habits') return `<li><button class="habit panel editing" data-act="edit" data-h="${h.id}">
+      <i class="sw t${h.tone}"></i><span class="hname">${esc(h.name)}</span><span class="hmeta">${freqLabel(h.freq)}</span><span class="link">Editar</span></button></li>`;
     const on = setOf(h).has(key);
     const { cur, best } = info(h);
     const week = h.freq.type === 'weekly' ? `${weekCount(h, now)} de ${h.freq.times} esta semana. ` : '';
@@ -93,10 +111,11 @@ function viewHoy() {
     ? `<button class="note" data-act="export">${daysSince === null ? 'Aún no tienes respaldo.' : `Último respaldo hace ${daysSince} días.`} Exportar ahora</button>`
     : '';
 
-  return head + reviewNotice(now) + (state.timer ? focusBox(key) : '') + checkIn(key) + `<p class="count">${doneToday} de ${due.length} hechos hoy</p>${backupNote}
-  <ul class="habits">${due.map(item).join('')}</ul>
-  ${rest.length ? `<h2 class="sub">Hoy no toca</h2><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}
-  ${state.metrics.length ? `<h2 class="sub">Métricas</h2>${metricRows(key)}` : ''}
+  return top + backupNote + `<section class="sec">${sectionHead('Hábitos', 'habits', `${doneToday} de ${due.length} hechos`)}
+    <ul class="habits">${due.map(item).join('')}</ul>
+    ${rest.length ? `<h3 class="sub-sm">Hoy no toca</h3><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}</section>
+  ${checkIn(key)}
+  ${metricsSec}
   ${state.timer ? '' : focusBox(key)}`;
 }
 
@@ -156,7 +175,8 @@ function viewAno() {
 
 function viewHabitos() {
   const last = state.lastBackup ? new Date(state.lastBackup).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' }) : 'nunca';
-  return header('Ajustes', 'Hábitos, métricas y respaldo') + `
+  const theme = ui.theme ?? 'system';
+  return header('Ajustes', 'Hábitos, métricas, tema y respaldo') + `
   <h2 class="sub">Hábitos</h2>
   <ul class="manage">${state.habits.map(h => `<li class="panel">
     <i class="sw t${h.tone}"></i><span>${esc(h.name)}<small>${freqLabel(h.freq)}</small></span>
@@ -166,13 +186,20 @@ function viewHabitos() {
   ${state.metrics.length ? `<ul class="manage">${state.metrics.map(m => `<li class="panel"><span>${esc(m.name)}<small>${m.unit ? esc(m.unit) : 'Sin unidad'}</small></span>
     <button class="link" data-act="metric-edit" data-m="${m.id}">Editar</button></li>`).join('')}</ul>` : ''}
   <button class="btn ghost wide" data-act="metric-new">Crear métrica</button>
+  <h2 class="sub">Tema</h2>
+  <div class="seg" role="group" aria-label="Tema">${[['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']].map(([v, l]) => `<button data-act="theme" data-v="${v}" aria-pressed="${theme === v}">${l}</button>`).join('')}</div>
   <section class="panel backup">
     <h2>Respaldo</h2>
     <p>Tus datos se guardan solo en este teléfono. Exporta un respaldo y guárdalo en Drive, en tu correo o en Archivos. Para pasar tus datos a otro teléfono, importa ese archivo allí.</p>
     <p class="muted">Último respaldo: ${last}</p>
     <div class="row"><button class="btn" data-act="export">Exportar respaldo</button>
     <label class="btn ghost">Importar respaldo<input type="file" accept="application/json,.json" id="import" hidden></label></div>
-  </section>`;
+  </section>
+  <footer class="signature">
+    <span class="seal" aria-hidden="true">AXG<br>25</span>
+    <p><span class="brand">HabyssT</span>Diseñada y creada por <strong>AXG25</strong>.</p>
+    <p class="muted small">2026. Tus datos viven solo en este teléfono.</p>
+  </footer>`;
 }
 
 
@@ -380,8 +407,12 @@ const scales = key => `<div class="scales">${scale5('mood', key)}${scale5('energ
 function checkIn(key) {
   const e = entryOf(key);
   const written = e?.text || Object.keys(e?.answers ?? {}).length;
-  return `<section class="checkin panel">${scales(key)}${sleepLine(key)}
-    <button class="link" data-act="entry" data-d="${key}">${written ? 'Seguir escribiendo' : 'Escribir en el diario'}</button></section>`;
+  const sm = sleepMins(e?.bed, e?.wake);
+  const summary = [e?.mood && `Ánimo: ${LEVELS[e.mood - 1].toLowerCase()}`, e?.energy && `Energía: ${LEVELS[e.energy - 1].toLowerCase()}`, sm && `Sueño: ${dur(sm)}`].filter(Boolean).join('. ') || 'Sin registrar todavía';
+  return `<details class="checkin sec" id="checkin"${ui.checkinClosed ? '' : ' open'}>
+    <summary><h2>Ánimo, energía y sueño</h2><span class="hmeta">${summary}</span></summary>
+    <div class="panel checkin-body">${scales(key)}${sleepLine(key)}
+    <button class="link" data-act="entry" data-d="${key}">${written ? 'Seguir escribiendo' : 'Escribir en el diario'}</button></div></details>`;
 }
 
 function setEntry(key, patch) {
@@ -620,10 +651,12 @@ function lastValue(m, before) {
   const k = Object.keys(state.values[m.id] ?? {}).filter(k => k < before).sort().at(-1);
   return k ? state.values[m.id][k] : null;
 }
-function metricRows(key) {
+function metricRows(key, editing = false) {
   if (!state.metrics.length) return '';
   return `<ul class="metrics">${state.metrics.map(m => {
     const v = valOf(m, key), prev = lastValue(m, key);
+    if (editing) return `<li><button class="metric panel editing" data-act="metric-edit" data-m="${m.id}"><span class="hname">${esc(m.name)}</span><span class="link">Editar</span>
+      <span class="hmeta">${m.unit ? `Unidad: ${esc(m.unit)}` : 'Sin unidad'}</span></button></li>`;
     return `<li><button class="metric panel" data-act="metric" data-m="${m.id}" data-d="${key}">
       <span class="hname">${esc(m.name)}</span>
       <b>${v === undefined ? '' : `${fmt(v)}${m.unit ? ` ${esc(m.unit)}` : ''}`}</b>
@@ -1138,6 +1171,8 @@ document.addEventListener('click', e => {
     case 'prompts': return savePrompts();
     case 'review': return openReview(d);
     case 'sleep': return openSleep(d);
+    case 'editmode': editMode = editMode === el.dataset.k ? null : el.dataset.k; return render();
+    case 'theme': setTheme(el.dataset.v); return render();
     case 'focus-setup': return openFocusSetup();
     case 'focus-stop': return stopFocus(true);
     case 'focus-cancel': return stopFocus(false);
@@ -1221,6 +1256,19 @@ document.addEventListener('change', e => {
 
 // Re-render when returning to the app so "today" is correct after midnight.
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && !$sheet.open && render());
+
+// Theme: 'system' follows the phone; the choice is per device, like the collapsed panels.
+function setTheme(v) {
+  setUi({ theme: v });
+  if (v === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = v;
+  const paper = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim();
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', paper));
+}
+if (ui.theme && ui.theme !== 'system') setTheme(ui.theme);
+
+// <details> toggle does not bubble, so listen in the capture phase.
+document.addEventListener('toggle', e => { if (e.target.id === 'checkin') setUi({ checkinClosed: !e.target.open }); }, true);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 render(true);
