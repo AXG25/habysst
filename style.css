@@ -565,13 +565,24 @@ body.zen-on { overflow: hidden; }
 .sec { margin: 0 0 26px; }
 .sec-act .link { font-weight: 700; }
 .add {
-  width: 40px; height: 40px;
-  display: grid; place-items: center;
-  border: 2.5px solid var(--ink); border-radius: 50%;
-  font: 400 1.5rem/1 var(--display);
+  /* 44px touch target, 30px visible ring drawn inside it */
+  position: relative;
+  width: 44px; height: 44px; margin: -7px -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, transparent 13px, var(--ink) 13px 15px, transparent 15.5px);
   transition: transform 160ms var(--ease-out);
 }
-.add:active { transform: scale(0.92); background: var(--ink); color: var(--paper); }
+.add:active { transform: scale(0.9); color: var(--paper); background: radial-gradient(circle closest-side, var(--ink) 15px, transparent 15.5px); }
+/* The plus is drawn, not typed, so it sits in the exact centre whatever the font. */
+.add::before, .add::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 12px; height: 2.5px; border-radius: 2px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+.add::after { transform: translate(-50%, -50%) rotate(90deg); }
+
+
 .sub-sm { margin: 18px 0 8px; font-size: 1rem; }
 .habit.editing { grid-template-columns: 36px 1fr auto; }
 .habit.editing .sw { grid-row: 1 / 3; }

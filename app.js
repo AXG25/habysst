@@ -74,7 +74,7 @@ ui.closed ??= { checkin: !!ui.checkinClosed };
 const secActions = kind => {
   const has = kind === 'habits' ? state.habits.length : state.metrics.length;
   return `${has ? `<button class="link" data-act="editmode" data-k="${kind}" aria-pressed="${editMode === kind}">${editMode === kind ? 'Listo' : 'Editar'}</button>` : ''}
-    <button class="add" data-act="${kind === 'habits' ? 'new' : 'metric-new'}" aria-label="${kind === 'habits' ? 'Añadir hábito' : 'Añadir métrica'}">+</button>`;
+    <button class="add" data-act="${kind === 'habits' ? 'new' : 'metric-new'}" aria-label="${kind === 'habits' ? 'Añadir hábito' : 'Añadir métrica'}"></button>`;
 };
 // A section that folds; whether it is open is remembered per device.
 const fold = (id, title, note, actions, body) =>
@@ -95,8 +95,9 @@ function viewHoy() {
   if (!state.habits.length) return top + fold('habits', 'Hábitos', '', secActions('habits'), emptyState) + checkIn(key) + metricsSec + focusBox(key);
 
   const strip = Array.from({ length: 14 }, (_, i) => addDays(now, i - 13));
-  const due = state.habits.filter(h => dueOn(h, now));
-  const rest = state.habits.filter(h => !dueOn(h, now));
+  const pendingFirst = list => [...list.filter(h => !setOf(h).has(key)), ...list.filter(h => setOf(h).has(key))];
+  const due = pendingFirst(state.habits.filter(h => dueOn(h, now)));
+  const rest = pendingFirst(state.habits.filter(h => !dueOn(h, now)));
   const doneToday = due.filter(h => setOf(h).has(key)).length;
   const item = (h, i) => {
     if (editMode === 'habits') return `<li><button class="habit panel editing" data-act="edit" data-h="${h.id}">
@@ -1169,9 +1170,16 @@ document.addEventListener('click', e => {
   const step = calMode === 'ano' ? 12 : 1;
   switch (act) {
     case 'toggle': {
+      const rows = () => document.querySelectorAll('#view .habits [data-act="toggle"]');
+      const before = new Map([...rows()].map(b => [b.dataset.h, b.getBoundingClientRect().top]));
       toggle(h, d);
       if ($sheet.open && $sheet.redraw) $sheet.redraw();
       render();
+      if (!reduceMotion.matches) rows().forEach(b => {
+        const dy = (before.get(b.dataset.h) ?? NaN) - b.getBoundingClientRect().top;
+        if (Math.abs(dy) > 1) b.parentElement.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+          { duration: 460, delay: 90, fill: 'backwards', easing: 'cubic-bezier(0.77, 0, 0.175, 1)' });
+      });
       // Animate only the check-in that changed, not the whole list.
       document.querySelectorAll(`[data-act="toggle"][data-h="${h}"][data-d="${d}"]`).forEach(b => b.classList.add('pop'));
       // Closing the last habit due today is worth a mark, once.
