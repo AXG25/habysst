@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Habysst</title>
+  <meta name="description" content="Seguimiento de hábitos con calendario mensual y anual de rachas. Tus datos se quedan en tu teléfono.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Habysst">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="view"></main>
+  <nav class="tabs" aria-label="Secciones">
+    <button data-tab="hoy">Hoy</button>
+    <button data-tab="mes">Mes</button>
+    <button data-tab="ano">Año</button>
+    <button data-tab="habitos">Hábitos</button>
+  </nav>
+  <dialog id="sheet"></dialog>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
