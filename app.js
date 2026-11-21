@@ -1,5 +1,5 @@
 import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress } from './logic.js';
-import { load, save, fromJSON, toJSON, cleanFreq, cleanGoal, TONES } from './store.js';
+import { load, save, fromJSON, toJSON, cleanFreq, cleanGoal, cleanEntry, TONES } from './store.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -10,6 +10,7 @@ let state = load();
 let tab = 'hoy';
 let cursor = new Date();
 let yearFilter = 'all';
+let calMode = 'mes';
 
 const $view = document.getElementById('view');
 const $sheet = document.getElementById('sheet');
@@ -69,7 +70,7 @@ const emptyState = `<section class="empty panel">
 function viewHoy() {
   const now = new Date(), key = ymd(now);
   const head = header(`${DAYS[now.getDay()]} ${now.getDate()}`, `${cap(MONTHS[now.getMonth()])} ${now.getFullYear()}`);
-  if (!state.habits.length) return head + emptyState;
+  if (!state.habits.length) return head + checkIn(key) + emptyState;
 
   const strip = Array.from({ length: 14 }, (_, i) => addDays(now, i - 13));
   const due = state.habits.filter(h => dueOn(h, now));
@@ -91,14 +92,18 @@ function viewHoy() {
     ? `<button class="note" data-act="export">${daysSince === null ? 'Aún no tienes respaldo.' : `Último respaldo hace ${daysSince} días.`} Exportar ahora</button>`
     : '';
 
-  return head + `<p class="count">${doneToday} de ${due.length} hechos hoy</p>${backupNote}
+  return head + checkIn(key) + `<p class="count">${doneToday} de ${due.length} hechos hoy</p>${backupNote}
   <ul class="habits">${due.map(item).join('')}</ul>
   ${rest.length ? `<h2 class="sub">Hoy no toca</h2><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}`;
 }
 
+const calSwitch = () => `<div class="seg" role="group" aria-label="Vista">
+  <button data-act="cal" data-m="mes" aria-pressed="${calMode === 'mes'}">Mes</button>
+  <button data-act="cal" data-m="ano" aria-pressed="${calMode === 'ano'}">Año</button></div>`;
+
 function viewMes() {
   const y = cursor.getFullYear(), m = cursor.getMonth(), t = ymd(new Date()), hs = state.habits;
-  const head = header(cap(MONTHS[m]), String(y), true);
+  const head = header(cap(MONTHS[m]), String(y), true) + calSwitch();
   if (!hs.length) return head + emptyState;
   const weeks = weeksOfMonth(y, m);
   const monthDays = weeks.flat().filter(Boolean);
@@ -109,7 +114,7 @@ function viewMes() {
       ${w.map((d, i) => {
         if (!d) return `<span class="day pad" style="grid-column:${i + 1}"></span>`;
         const k = ymd(d);
-        return `<button class="day${k === t ? ' today' : ''}" style="grid-column:${i + 1}" data-act="day" data-d="${k}"${k > t ? ' disabled' : ''} aria-label="${d.getDate()} de ${MONTHS[m]}"><span>${d.getDate()}</span></button>`;
+        return `<button class="day${k === t ? ' today' : ''}${state.journal[k] ? ' has-entry' : ''}" style="grid-column:${i + 1}" data-act="day" data-d="${k}"${k > t ? ' disabled' : ''} aria-label="${d.getDate()} de ${MONTHS[m]}"><span>${d.getDate()}</span></button>`;
       }).join('')}
       ${hs.map((h, j) => bars(w, h, j + 2)).join('')}
     </div>`).join('')}
@@ -119,7 +124,7 @@ function viewMes() {
 
 function viewAno() {
   const y = cursor.getFullYear(), t = ymd(new Date());
-  const head = header(String(y), 'Rachas del año', true);
+  const head = header(String(y), 'Rachas del año', true) + calSwitch();
   if (!state.habits.length) return head + emptyState;
   if (yearFilter !== 'all' && !state.habits.some(h => h.id === yearFilter)) yearFilter = 'all';
   const hs = yearFilter === 'all' ? state.habits : state.habits.filter(h => h.id === yearFilter);
@@ -346,7 +351,120 @@ function stamp(text) {
   document.body.append(el);
 }
 
-const views = { hoy: viewHoy, mes: viewMes, ano: viewAno, metas: viewMetas, habitos: viewHabitos };
+
+// ---- Journal
+const LEVELS = ['Muy bajo', 'Bajo', 'Normal', 'Bueno', 'Muy bueno'];
+const KINDS = { mood: 'Ánimo', energy: 'Energía' };
+const entryOf = k => state.journal[k];
+
+// Five steps from sparse screentone to solid ink: the scale reads without color or faces.
+const scale5 = (kind, key) => {
+  const v = entryOf(key)?.[kind] ?? null;
+  return `<div class="scale" role="group" aria-label="${KINDS[kind]}">
+    <span class="scale-l">${KINDS[kind]}</span>
+    <div class="scale-b">${LEVELS.map((l, i) => `<button type="button" class="lv lv${i + 1}" data-act="rate" data-k="${kind}" data-d="${key}" data-v="${i + 1}" aria-pressed="${v === i + 1}" aria-label="${l}"></button>`).join('')}</div>
+    <span class="scale-v">${v ? LEVELS[v - 1] : 'Sin marcar'}</span></div>`;
+};
+const scales = key => `<div class="scales">${scale5('mood', key)}${scale5('energy', key)}</div>`;
+
+function checkIn(key) {
+  const e = entryOf(key);
+  const written = e?.text || Object.keys(e?.answers ?? {}).length;
+  return `<section class="checkin panel">${scales(key)}
+    <button class="link" data-act="entry" data-d="${key}">${written ? 'Seguir escribiendo' : 'Escribir en el diario'}</button></section>`;
+}
+
+function setEntry(key, patch) {
+  const next = cleanEntry({ ...(entryOf(key) ?? {}), ...patch });
+  if (next) state.journal[key] = next;
+  else delete state.journal[key];
+}
+
+function rate5(kind, key, v) {
+  setEntry(key, { [kind]: entryOf(key)?.[kind] === v ? null : v }); // tap again to clear
+  save(state);
+  if ($sheet.open && $sheet.redraw) $sheet.redraw();
+  render();
+}
+
+const longDate = k => { const d = parseYmd(k); return `${DAYS[d.getDay()]} ${d.getDate()} de ${MONTHS[d.getMonth()]}`; };
+
+function openEntry(key) {
+  const e = entryOf(key) ?? { answers: {} };
+  // Questions answered before you edited the list stay visible on their entries.
+  const qs = [...new Set([...state.prompts, ...Object.keys(e.answers ?? {})])];
+  const draw = () => {
+    $sheet.innerHTML = `<form method="dialog" id="entry" class="entry">
+      <h2 tabindex="-1" autofocus>${longDate(key)}</h2>
+      ${scales(key)}
+      ${qs.map((q, i) => `<label class="field">${esc(q)}<textarea name="q${i}" rows="2" maxlength="5000">${esc(e.answers?.[q] ?? '')}</textarea></label>`).join('')}
+      <label class="field">Notas<textarea name="text" rows="6" maxlength="20000" placeholder="Escribe lo que quieras.">${esc(e.text ?? '')}</textarea></label>
+      <p class="muted saved" aria-live="polite">Se guarda mientras escribes.</p>
+      <div class="row"><button class="btn">Listo</button></div>
+    </form>`;
+    const form = $sheet.querySelector('#entry');
+    let timer = null;
+    const flush = () => {
+      clearTimeout(timer);
+      timer = null;
+      const f = new FormData(form);
+      setEntry(key, { text: f.get('text'), answers: Object.fromEntries(qs.map((q, i) => [q, f.get(`q${i}`)])) });
+      save(state);
+      form.querySelector('.saved').textContent = 'Guardado.';
+    };
+    form.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(flush, 300); });
+    // Save any pending keystrokes when the sheet closes, however it closes.
+    $sheet.addEventListener('close', () => { if (timer) flush(); render(); }, { once: true });
+  };
+  // Rating inside the entry only redraws the scales, so typed text is untouched.
+  $sheet.redraw = () => { const sc = $sheet.querySelector('.scales'); if (sc) sc.outerHTML = scales(key); };
+  draw();
+  if (!$sheet.open) $sheet.showModal();
+}
+
+function entryCards(q) {
+  const needle = q.trim().toLowerCase();
+  const keys = Object.keys(state.journal).sort().reverse();
+  const hits = keys.filter(k => {
+    if (!needle) return true;
+    const e = state.journal[k];
+    return [e.text, ...Object.values(e.answers)].join('\n').toLowerCase().includes(needle);
+  });
+  if (!hits.length) return `<p class="muted">${needle ? 'Ninguna entrada contiene ese texto.' : 'Aún no hay entradas. Empieza por la de hoy.'}</p>`;
+  return `<ul class="entries">${hits.slice(0, 200).map(k => {
+    const e = state.journal[k];
+    const body = [...Object.values(e.answers), e.text].filter(Boolean).map(t => (/[.!?…]$/.test(t) ? t : `${t}.`)).join(' ');
+    const meta = [e.mood && `Ánimo: ${LEVELS[e.mood - 1].toLowerCase()}`, e.energy && `Energía: ${LEVELS[e.energy - 1].toLowerCase()}`].filter(Boolean).join('. ');
+    return `<li><button class="entry-card panel" data-act="entry" data-d="${k}">
+      <span class="ename">${longDate(k)}</span>
+      ${meta ? `<span class="hmeta">${meta}.</span>` : ''}
+      ${body ? `<span class="excerpt">${esc(body.slice(0, 180))}${body.length > 180 ? '…' : ''}</span>` : ''}
+    </button></li>`;
+  }).join('')}</ul>`;
+}
+
+function viewDiario() {
+  const n = Object.keys(state.journal).length;
+  return header('Diario', plural(n, 'entrada', 'entradas')) + `
+    <button class="btn wide" data-act="entry" data-d="${ymd(new Date())}">${entryOf(ymd(new Date())) ? 'Seguir con la entrada de hoy' : 'Escribir la entrada de hoy'}</button>
+    <label class="field search">Buscar en el diario<input type="search" id="jsearch" placeholder="Palabra o frase" autocomplete="off"></label>
+    <div id="entries">${entryCards('')}</div>
+    <details class="closed"><summary>Preguntas guía</summary>
+      <label class="field">Una por línea. Déjalo vacío si prefieres escribir libre.<textarea id="prompts" rows="4">${esc(state.prompts.join('\n'))}</textarea></label>
+      <button class="btn" data-act="prompts">Guardar preguntas</button></details>`;
+}
+
+function savePrompts() {
+  state.prompts = document.getElementById('prompts').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 8);
+  save(state);
+  render();
+}
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'jsearch') document.getElementById('entries').innerHTML = entryCards(e.target.value);
+});
+
+const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : viewAno()), diario: viewDiario, metas: viewMetas, habitos: viewHabitos };
 
 // `enter` replays the ink-stroke reveal; only on navigation, never on a check-in.
 function render(enter = false) {
@@ -374,7 +492,9 @@ function openDay(key) {
         return `<li><button type="button" class="habit compact panel${on ? ' on' : ''}" data-act="toggle" data-h="${h.id}" data-d="${key}" aria-pressed="${on}">
           <span class="check" aria-hidden="true"></span><span class="hname">${esc(h.name)}</span></button></li>`;
       }).join('')}</ul>
-      <button class="btn wide">Listo</button></form>`;
+      ${scales(key)}
+      <div class="row"><button type="button" class="btn ghost" data-act="entry" data-d="${key}">${state.journal[key]?.text || Object.keys(state.journal[key]?.answers ?? {}).length ? 'Ver entrada del diario' : 'Escribir en el diario'}</button>
+      <button class="btn">Listo</button></div></form>`;
   };
   $sheet.redraw = draw;
   draw();
@@ -466,11 +586,11 @@ document.addEventListener('click', e => {
   }
   if (el.dataset.tab) {
     tab = el.dataset.tab;
-    if (tab === 'mes' || tab === 'ano') cursor = new Date();
+    if (tab === 'rachas') cursor = new Date();
     return render(true);
   }
   const { act, h, d } = el.dataset;
-  const step = tab === 'ano' ? 12 : 1;
+  const step = calMode === 'ano' ? 12 : 1;
   switch (act) {
     case 'toggle': {
       toggle(h, d);
@@ -483,8 +603,12 @@ document.addEventListener('click', e => {
     case 'day': return openDay(d);
     case 'prev': cursor = new Date(cursor.getFullYear(), cursor.getMonth() - step, 1); return render(true);
     case 'next': cursor = new Date(cursor.getFullYear(), cursor.getMonth() + step, 1); return render(true);
-    case 'month': cursor = new Date(cursor.getFullYear(), +el.dataset.m, 1); tab = 'mes'; return render(true);
+    case 'month': cursor = new Date(cursor.getFullYear(), +el.dataset.m, 1); tab = 'rachas'; calMode = 'mes'; return render(true);
     case 'yf': yearFilter = h; return render();
+    case 'cal': calMode = el.dataset.m; return render(true);
+    case 'entry': return openEntry(d);
+    case 'rate': return rate5(el.dataset.k, d, +el.dataset.v);
+    case 'prompts': return savePrompts();
     case 'new': return openEditor();
     case 'edit': return openEditor(state.habits.find(x => x.id === h));
     case 'close': return $sheet.close();

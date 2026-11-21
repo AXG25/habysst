@@ -402,3 +402,44 @@ dialog[open]::backdrop { background: rgb(0 0 0 / 0.45); }
   *, *::before, *::after, dialog, dialog::backdrop { animation: none !important; transition-duration: 0ms !important; }
   .stamp { animation: fade 1500ms both !important; }
 }
+
+/* Journal */
+.seg { display: grid; grid-template-columns: 1fr 1fr; margin: -4px 0 14px; border: 2.5px solid var(--ink); border-radius: 3px; }
+.seg button { min-height: 40px; font-weight: 700; transition: transform 160ms var(--ease-out); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.seg button:active { transform: scale(0.97); }
+
+.checkin { padding: 12px 14px 6px; margin-bottom: 16px; }
+.checkin .link { margin-top: 4px; }
+.scales { display: grid; gap: 10px; margin: 4px 0 8px; }
+.scale { display: grid; grid-template-columns: 4.6rem 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; }
+.scale-l { font-weight: 700; font-size: 0.9rem; }
+.scale-v { grid-column: 2; font-size: 0.8rem; color: var(--muted); }
+.scale-b { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.lv {
+  height: 30px;
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  transition: transform 160ms var(--ease-out);
+}
+.lv:active { transform: scale(0.92); }
+.lv[aria-pressed="true"] { outline: 3px solid var(--hanko); outline-offset: 2px; }
+.lv1 { background-image: radial-gradient(var(--ink) 0.8px, transparent 1px); background-size: 6px 6px; }
+.lv2 { background-image: radial-gradient(var(--ink) 1px, transparent 1.3px); background-size: 4.5px 4.5px; }
+.lv3 { background-image: repeating-linear-gradient(-45deg, var(--ink) 0 1.3px, transparent 1.3px 4px); }
+.lv4 { background-image: repeating-linear-gradient(45deg, var(--ink) 0 1.2px, transparent 1.2px 3.5px), repeating-linear-gradient(-45deg, var(--ink) 0 1.2px, transparent 1.2px 3.5px); }
+.lv5 { background: var(--ink); }
+
+.day.has-entry span { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.day.today.has-entry span { text-decoration-color: #fff; }
+
+.search { margin: 18px 0 12px; }
+.search input { font-weight: 400; }
+.entries { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.entry-card { width: 100%; display: grid; gap: 2px; padding: 12px 14px; text-align: left; transition: transform 160ms var(--ease-out); }
+.entry-card:active { transform: scale(0.98); }
+.ename { font-weight: 700; }
+.excerpt { margin-top: 4px; font-size: 0.95rem; overflow-wrap: anywhere; }
+.entry textarea { min-height: 3.2em; }
+.entry .field { font-weight: 700; }
+.saved { margin: 4px 0 0; font-size: 0.85rem; }

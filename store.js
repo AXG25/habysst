@@ -1,6 +1,7 @@
 const KEY = 'habysst';
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const TONES = 6;
+export const DEFAULT_PROMPTS = ['¿Qué salió bien hoy?', '¿Qué aprendí?', '¿Qué haré distinto mañana?'];
 
 export function cleanFreq(f) {
   if (f?.type === 'days' && Array.isArray(f.days)) {
@@ -14,6 +15,20 @@ export function cleanFreq(f) {
 const str = (x, max) => (typeof x === 'string' ? x.trim().slice(0, max) : '');
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const date = x => (typeof x === 'string' && DATE.test(x) ? x : null);
+
+const scale = x => (Number.isInteger(x) && x >= 1 && x <= 5 ? x : null);
+
+// A journal entry; null when it holds nothing, so empty days are not stored.
+export function cleanEntry(e) {
+  if (!e || typeof e !== 'object') return null;
+  const answers = {};
+  for (const [q, a] of Object.entries(e.answers && typeof e.answers === 'object' ? e.answers : {})) {
+    const t = str(a, 5000);
+    if (t) answers[str(q, 120)] = t;
+  }
+  const entry = { mood: scale(e.mood), energy: scale(e.energy), text: str(e.text, 20000), answers };
+  return entry.mood || entry.energy || entry.text || Object.keys(answers).length ? entry : null;
+}
 
 export function cleanGoal(g, habitIds) {
   const title = str(g?.title, 80);
@@ -42,7 +57,7 @@ export function cleanGoal(g, habitIds) {
   };
 }
 
-const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], lastBackup: null });
+const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
@@ -64,13 +79,21 @@ export function fromJSON(obj) {
   }
   const ids = new Set(habits.map(h => h.id));
   const goals = Array.isArray(obj.goals) ? obj.goals.map(g => cleanGoal(g, ids)).filter(Boolean) : [];
-  return { version: 1, habits, done, goals, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
+  const journal = {};
+  for (const [k, e] of Object.entries(obj.journal && typeof obj.journal === 'object' ? obj.journal : {})) {
+    const entry = cleanEntry(e);
+    if (DATE.test(k) && entry) journal[k] = entry;
+  }
+  const prompts = Array.isArray(obj.prompts) ? obj.prompts.map(x => str(x, 120)).filter(Boolean).slice(0, 8) : [...DEFAULT_PROMPTS];
+  return { version: 1, habits, done, goals, journal, prompts, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
 }
 
 export const toJSON = s => ({
   version: 1,
   habits: s.habits,
   goals: s.goals,
+  journal: s.journal,
+  prompts: s.prompts,
   done: Object.fromEntries(s.habits.map(h => [h.id, [...(s.done[h.id] ?? [])].sort()])),
   lastBackup: s.lastBackup,
 });
@@ -86,7 +109,7 @@ export function load() {
   }
 }
 
-// shortcut: localStorage (~5 MB) holds years of check-ins; move to IndexedDB if the journal adds long text.
+// shortcut: localStorage (~5 MB) fits years of check-ins and ~1 KB/day of journal; move to IndexedDB if entries get long or hold images.
 export function save(s) {
   try {
     localStorage.setItem(KEY, JSON.stringify(toJSON(s)));

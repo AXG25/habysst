@@ -77,3 +77,14 @@ test('cleanGoal drops unknown habits and invalid fields', async () => {
   const g = cleanGoal({ id: 'g', title: 'Correr', kind: 'x', target: 'a', habits: ['h1', 'zz'], deadline: '2026-13', status: 'weird' }, new Set(['h1']));
   assert.deepEqual([g.kind, g.target, g.habits, g.deadline, g.status], ['number', 0, ['h1'], null, 'active']);
 });
+
+test('journal entries: empty ones vanish, scales are 1-5, prompts survive import', async () => {
+  const { cleanEntry, fromJSON, toJSON } = await import('../store.js');
+  assert.equal(cleanEntry({ mood: null, text: '   ', answers: { '¿Qué?': ' ' } }), null);
+  assert.deepEqual(cleanEntry({ mood: 7, energy: 2, text: 'ok' }), { mood: null, energy: 2, text: 'ok', answers: {} });
+  const s = fromJSON({ version: 1, habits: [], done: {}, journal: { '2026-11-20': { mood: 4 }, bad: { mood: 3 }, '2026-11-21': {} }, prompts: ['A', ''] });
+  assert.deepEqual(Object.keys(s.journal), ['2026-11-20']);
+  assert.deepEqual(s.prompts, ['A']);
+  assert.equal(fromJSON(JSON.parse(JSON.stringify(toJSON(s)))).journal['2026-11-20'].mood, 4);
+  assert.equal(fromJSON({ version: 1, habits: [], done: {} }).prompts.length, 3); // older backups get defaults
+});
