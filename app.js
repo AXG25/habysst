@@ -1,4 +1,4 @@
-import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress, mondayOf, weekStats, reviewWeek, sleepMins } from './logic.js';
+import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress, mondayOf, weekStats, reviewWeek, sleepMins, mean, compareDays } from './logic.js';
 import { load, save, fromJSON, toJSON, cleanFreq, cleanGoal, cleanEntry, cleanReview, REVIEW_QS, TONES } from './store.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -11,6 +11,7 @@ let tab = 'hoy';
 let cursor = new Date();
 let yearFilter = 'all';
 let calMode = 'mes';
+let anaDays = 30;
 
 const $view = document.getElementById('view');
 const $sheet = document.getElementById('sheet');
@@ -101,7 +102,8 @@ function viewHoy() {
 
 const calSwitch = () => `<div class="seg" role="group" aria-label="Vista">
   <button data-act="cal" data-m="mes" aria-pressed="${calMode === 'mes'}">Mes</button>
-  <button data-act="cal" data-m="ano" aria-pressed="${calMode === 'ano'}">Año</button></div>`;
+  <button data-act="cal" data-m="ano" aria-pressed="${calMode === 'ano'}">Año</button>
+  <button data-act="cal" data-m="analisis" aria-pressed="${calMode === 'analisis'}">Análisis</button></div>`;
 
 function viewMes() {
   const y = cursor.getFullYear(), m = cursor.getMonth(), t = ymd(new Date()), hs = state.habits;
@@ -754,7 +756,173 @@ function stopFocus(keep) {
   render();
 }
 
-const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : viewAno()), diario: viewDiario, metas: viewMetas, habitos: viewHabitos };
+// ---- Analysis
+const fmt1 = n => fmt(Math.round(n * 10) / 10);
+const short = k => parseYmd(k).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+const lastDays = (n, end = new Date()) => Array.from({ length: n }, (_, i) => ymd(addDays(end, i - n + 1)));
+
+// Single-series line chart: ink line, recessive grid, tap or drag to read any day.
+const CW = 320, CH = 128, PL = 30, PR = 8, PT = 10, PB = 20;
+const charts = new Map();
+function lineChart(id, title, pts, { min, max, show }) {
+  const n = pts.length;
+  const x = i => PL + (n === 1 ? 0 : (i * (CW - PL - PR)) / (n - 1));
+  const y = v => PT + (1 - (v - min) / (max - min)) * (CH - PT - PB);
+  // Daily values are noisy: dots show each day, the ink line is the 7-day mean (needs 3+ values in the window).
+  const avg = pts.map((_, i) => { const w = pts.slice(Math.max(0, i - 6), i + 1).map(p => p.v).filter(v => v !== null); return w.length >= 3 ? mean(w) : null; });
+  let d = '', pen = false;
+  avg.forEach((v, i) => {
+    if (v === null) { pen = false; return; }
+    d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+    pen = true;
+  });
+  const lone = pts.map((p, i) => (p.v !== null ? `<circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="${n > 40 ? 1.6 : 2.2}" class="pt"/>` : '')).join('');
+  const ticks = [min, (min + max) / 2, max].map(v => `<line x1="${PL}" x2="${CW - PR}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${PL - 6}" y="${y(v) + 3.5}" class="ax" text-anchor="end">${show(v)}</text>`).join('');
+  charts.set(id, { pts, avg, x, y, show });
+  const filled = pts.filter(p => p.v !== null);
+  return `<figure class="chart" data-chart="${id}">
+    <figcaption>${title}<small>Puntos: cada día. Línea: media de 7 días.</small></figcaption>
+    <svg viewBox="0 0 ${CW} ${CH}" role="img" aria-label="${title}. ${filled.length} días con dato, de ${short(pts[0].k)} a ${short(pts.at(-1).k)}.">
+      ${ticks}
+      <text x="${PL}" y="${CH - 4}" class="ax">${short(pts[0].k)}</text><text x="${CW - PR}" y="${CH - 4}" class="ax" text-anchor="end">${short(pts.at(-1).k)}</text>
+      ${lone}<path d="${d}" class="ln" pathLength="1"/>
+      <line class="cross" y1="${PT}" y2="${CH - PB}" x1="-10" x2="-10"/><circle class="cdot" r="4.5" cx="-10" cy="-10"/>
+    </svg>
+    <p class="tip" aria-live="polite">Toca o desliza sobre la gráfica para ver cada día.</p>
+    <details><summary>Ver datos</summary><table><tbody>${filled.slice().reverse().map(p => `<tr><td>${short(p.k)}</td><td>${show(p.v)}</td></tr>`).join('')}</tbody></table></details>
+  </figure>`;
+}
+
+function scrub(e) {
+  const svg = e.target.closest?.('.chart svg');
+  if (!svg) return;
+  const fig = svg.closest('.chart'), c = charts.get(fig.dataset.chart);
+  if (!c) return;
+  const r = svg.getBoundingClientRect();
+  const vx = ((e.clientX - r.left) / r.width) * CW;
+  const n = c.pts.length;
+  const i = Math.max(0, Math.min(n - 1, Math.round(((vx - PL) / (CW - PL - PR)) * (n - 1))));
+  const p = c.pts[i], cx = c.x(i);
+  const cross = svg.querySelector('.cross'), dot = svg.querySelector('.cdot');
+  cross.setAttribute('x1', cx);
+  cross.setAttribute('x2', cx);
+  dot.setAttribute('cx', p.v === null ? -10 : cx);
+  dot.setAttribute('cy', p.v === null ? -10 : c.y(p.v));
+  svg.classList.add('on');
+  fig.querySelector('.tip').textContent = `${longDate(p.k)}: ${p.v === null ? 'sin dato' : c.show(p.v)}${c.avg[i] === null ? '' : `. Media de 7 días: ${c.show(c.avg[i])}`}`;
+}
+document.addEventListener('pointerdown', scrub);
+document.addEventListener('pointermove', scrub);
+
+const tile = (label, value, before) => (value === null ? '' : `<li class="tile panel"><span class="hmeta">${label}</span><b>${value}</b>${before ? `<small>${before}</small>` : ''}</li>`);
+const meter = (name, pct, figure, note, sw = '') =>
+  `<li class="meter">${sw}<span>${name}</span><b>${figure}</b><i class="track"><i style="--p:${Math.max(0, Math.min(1, pct))}"></i></i>${note ? `<small>${note}</small>` : ''}</li>`;
+
+function habitRate(keys) {
+  let ok = 0, all = 0;
+  for (const h of state.habits) {
+    const ps = info(h).ps.filter(p => ymd(p.start) >= keys[0] && ymd(p.start) <= keys.at(-1));
+    all += ps.length;
+    ok += ps.filter(p => p.ok).length;
+  }
+  return all ? Math.round((100 * ok) / all) : null;
+}
+const avgK = (keys, f) => mean(keys.map(f).filter(v => v !== null && v !== undefined));
+const sleepOf = k => sleepMins(entryOf(k)?.bed, entryOf(k)?.wake);
+
+function insights(keys) {
+  const measures = [
+    { f: k => entryOf(k)?.mood ?? null, label: 'tu ánimo medio es' },
+    { f: k => entryOf(k)?.energy ?? null, label: 'tu energía media es' },
+  ];
+  const conds = state.habits.map(h => {
+    const first = [...setOf(h)].sort()[0];
+    return { yes: `haces «${esc(h.name)}»`, no: 'no lo haces', f: k => (!first || k < first || !dueOn(h, parseYmd(k)) ? null : setOf(h).has(k)) };
+  });
+  conds.push({ yes: 'duermes 7 horas o más', no: 'duermes menos', f: k => { const m = sleepOf(k); return m === null ? null : m >= 420; } });
+  const firstFocus = state.focus.map(f => ymd(new Date(f.start))).sort()[0];
+  if (firstFocus) conds.push({ yes: 'haces una sesión de enfoque', no: 'no la haces', f: k => (k < firstFocus ? null : focusOn(k) > 0) });
+  const out = [];
+  for (const c of conds) for (const m of measures) {
+    const r = compareDays(keys, m.f, c.f);
+    if (r && Math.abs(r.yes - r.no) >= 0.4) out.push({ ...r, c, m });
+  }
+  return out.sort((a, b) => Math.abs(b.yes - b.no) - Math.abs(a.yes - a.no)).slice(0, 6);
+}
+
+function viewAnalisis() {
+  charts.clear();
+  const keys = lastDays(anaDays), prev = lastDays(anaDays, addDays(new Date(), -anaDays));
+  const range = `<div class="seg small" role="group" aria-label="Periodo">${[30, 90].map(n => `<button data-act="range" data-n="${n}" aria-pressed="${anaDays === n}">${n} días</button>`).join('')}</div>`;
+  const before = (v, f) => (v === null ? 'Periodo anterior: sin datos' : `Periodo anterior: ${f(v)}`);
+
+  const hr = habitRate(keys), hp = habitRate(prev);
+  const mood = avgK(keys, k => entryOf(k)?.mood), moodP = avgK(prev, k => entryOf(k)?.mood);
+  const en = avgK(keys, k => entryOf(k)?.energy), enP = avgK(prev, k => entryOf(k)?.energy);
+  const sl = avgK(keys, sleepOf), slP = avgK(prev, sleepOf);
+  const fo = focusIn(keys[0], keys.at(-1)), foP = focusIn(prev[0], prev.at(-1));
+  const tiles = [
+    tile('Cumplimiento de hábitos', hr === null ? null : `${hr}%`, before(hp, v => `${v}%`)),
+    tile('Ánimo medio', mood === null ? null : `${fmt1(mood)} de 5`, before(moodP, fmt1)),
+    tile('Energía media', en === null ? null : `${fmt1(en)} de 5`, before(enP, fmt1)),
+    tile('Sueño medio', sl === null ? null : dur(Math.round(sl)), before(slP, v => dur(Math.round(v)))),
+    tile('Enfoque', fo ? dur(fo) : null, foP ? `Periodo anterior: ${dur(foP)}` : 'Periodo anterior: sin sesiones'),
+  ].join('');
+
+  const ins = insights(keys);
+  const insHtml = ins.length
+    ? `<ul class="insights">${ins.map(r => `<li class="panel"><p>Los días que ${r.c.yes}, ${r.m.label} <b>${fmt1(r.yes)}</b>. Los días que ${r.c.no}, <b>${fmt1(r.no)}</b>.</p>
+        <ul class="meters">${meter('Sí', r.yes / 5, fmt1(r.yes), plural(r.nYes, 'día', 'días'))}${meter('No', r.no / 5, fmt1(r.no), plural(r.nNo, 'día', 'días'))}</ul></li>`).join('')}</ul>
+       <p class="muted small">Son coincidencias en tus propios datos, no prueban que una cosa cause la otra. Solo se muestran diferencias de 0,4 puntos o más, con al menos 5 días en cada lado.</p>`
+    : `<p class="muted">Aún no hay suficientes datos. Para comparar hacen falta al menos 5 días con y 5 sin cada hábito (o con y sin 7 horas de sueño) en los que hayas marcado ánimo o energía.</p>`;
+
+  const series = f => keys.map(k => ({ k, v: f(k) ?? null }));
+  const enough = sr => sr.filter(p => p.v !== null).length >= 2;
+  const trends = [];
+  const s1 = series(k => entryOf(k)?.mood), s2 = series(k => entryOf(k)?.energy);
+  const s3 = series(k => { const m = sleepOf(k); return m === null ? null : m / 60; });
+  if (enough(s1)) trends.push(lineChart('mood', 'Ánimo', s1, { min: 1, max: 5, show: v => fmt1(v) }));
+  if (enough(s2)) trends.push(lineChart('energy', 'Energía', s2, { min: 1, max: 5, show: v => fmt1(v) }));
+  if (enough(s3)) {
+    const top = Math.max(10, Math.ceil(Math.max(...s3.filter(p => p.v !== null).map(p => p.v))));
+    trends.push(lineChart('sleep', 'Horas de sueño', s3, { min: 0, max: top, show: v => `${fmt1(v)} h` }));
+  }
+  for (const m of state.metrics) {
+    const sm = series(k => valOf(m, k));
+    if (!enough(sm)) continue;
+    const vs = sm.filter(p => p.v !== null).map(p => p.v);
+    const padv = (Math.max(...vs) - Math.min(...vs)) * 0.15 || 1;
+    trends.push(lineChart(`m-${m.id}`, esc(m.name), sm, { min: Math.min(...vs) - padv, max: Math.max(...vs) + padv, show: v => `${fmt1(v)}${m.unit ? ` ${esc(m.unit)}` : ''}` }));
+  }
+
+  const now = new Date(), t = ymd(now);
+  const d14 = ymd(addDays(now, -13)), d15 = ymd(addDays(now, -14)), d28 = ymd(addDays(now, -27));
+  const habitsHtml = state.habits.map(h => {
+    const r = rate(h, keys[0], keys.at(-1));
+    if (r === null) return '';
+    const now14 = rate(h, d14, t), was14 = rate(h, d28, d15);
+    const risk = now14 !== null && was14 !== null && was14 - now14 >= 25;
+    return meter(esc(h.name), r / 100, `${r}%`, risk ? `<strong class="risk">En riesgo.</strong> Bajó de ${was14}% a ${now14}% en las últimas dos semanas.` : '', `<i class="sw t${h.tone}"></i>`);
+  }).join('');
+
+  const byGoal = new Map();
+  for (const f of state.focus) {
+    const k = ymd(new Date(f.start));
+    if (k >= keys[0] && k <= keys.at(-1)) byGoal.set(f.goal, (byGoal.get(f.goal) ?? 0) + f.mins);
+  }
+  const ranked = [...byGoal.entries()].sort((a, b) => b[1] - a[1]);
+  const topMins = ranked[0]?.[1] ?? 1;
+  const focusHtml = ranked.map(([g, mins]) => meter(g ? esc(state.goals.find(x => x.id === g)?.title ?? 'Meta borrada') : 'Sin meta', mins / topMins, dur(mins), '')).join('');
+
+  return header('Análisis', `Últimos ${anaDays} días`) + calSwitch() + range + `
+    ${tiles ? `<ul class="tiles">${tiles}</ul>` : ''}
+    <h2 class="sub">Lo que muestran tus datos</h2>${insHtml}
+    ${trends.length ? `<h2 class="sub">Tendencias</h2>${trends.join('')}` : ''}
+    ${habitsHtml ? `<h2 class="sub">Hábitos</h2><ul class="meters">${habitsHtml}</ul>` : ''}
+    ${focusHtml ? `<h2 class="sub">Enfoque por meta</h2><ul class="meters">${focusHtml}</ul>` : ''}`;
+}
+
+const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : calMode === 'ano' ? viewAno() : viewAnalisis()), diario: viewDiario, metas: viewMetas, habitos: viewHabitos };
 
 // `enter` replays the ink-stroke reveal; only on navigation, never on a check-in.
 function render(enter = false) {
@@ -896,6 +1064,7 @@ document.addEventListener('click', e => {
     case 'month': cursor = new Date(cursor.getFullYear(), +el.dataset.m, 1); tab = 'rachas'; calMode = 'mes'; return render(true);
     case 'yf': yearFilter = h; return render();
     case 'cal': calMode = el.dataset.m; return render(true);
+    case 'range': anaDays = +el.dataset.n; return render(true);
     case 'entry': return openEntry(d);
     case 'rate': return rate5(el.dataset.k, d, +el.dataset.v);
     case 'prompts': return savePrompts();

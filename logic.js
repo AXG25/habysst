@@ -130,3 +130,18 @@ export function sleepMins(bed, wake) {
   const d = (m(wake) - m(bed) + 1440) % 1440;
   return d || null;
 }
+
+export const mean = xs => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+// Average a daily measure on days where `cond` is true vs false. `cond` returns null for days
+// that don't count (habit not due yet, no sleep logged). Needs `minN` days on each side.
+export function compareDays(keys, measure, cond, minN = 5) {
+  const yes = [], no = [];
+  for (const k of keys) {
+    const v = measure(k), c = v === null || v === undefined ? null : cond(k);
+    if (c === null || c === undefined) continue;
+    (c ? yes : no).push(v);
+  }
+  if (yes.length < minN || no.length < minN) return null;
+  return { yes: mean(yes), no: mean(no), nYes: yes.length, nNo: no.length };
+}

@@ -127,3 +127,13 @@ test('focus sessions are validated and goal links dropped when the goal is gone'
   assert.deepEqual(s.focus.map(f => [f.mins, f.goal]), [[25, 'g'], [10, null]]);
   assert.deepEqual(s.timer, { start: '2026-11-21T10:00:00.000Z', target: 50, goal: null });
 });
+
+test('compareDays needs enough days on both sides and skips unknown days', async () => {
+  const { compareDays } = await import('../logic.js');
+  const keys = Array.from({ length: 12 }, (_, i) => `k${i}`);
+  const energy = k => (k === 'k11' ? null : +k.slice(1) < 6 ? 4 : 2);
+  const ran = k => +k.slice(1) < 6;
+  assert.deepEqual(compareDays(keys, energy, ran), { yes: 4, no: 2, nYes: 6, nNo: 5 });
+  assert.equal(compareDays(keys, energy, ran, 6), null);
+  assert.equal(compareDays(keys, energy, () => null), null);
+});

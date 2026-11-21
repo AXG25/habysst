@@ -477,3 +477,48 @@ dialog .metrics { margin: 8px 0 12px; }
 .clock.over { color: var(--hanko); }
 .focusbox .row { margin-top: 6px; }
 .focusbox.idle { margin: 24px 0 0; padding: 0; justify-items: stretch; }
+
+/* Analysis */
+.seg { grid-auto-flow: column; grid-auto-columns: 1fr; grid-template-columns: none; }
+.seg.small { margin-top: -6px; }
+.seg.small button { min-height: 34px; font-size: 0.9rem; }
+.tiles { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { display: grid; gap: 2px; padding: 12px; align-content: start; }
+.tile b { font: 400 1.4rem/1.15 var(--display); }
+.tile small { color: var(--muted); font-size: 0.8rem; }
+.insights { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.insights > li { padding: 12px 14px; }
+.insights p { margin: 0 0 8px; }
+.insights b { font-family: var(--display); font-weight: 400; }
+.small { font-size: 0.85rem; }
+.meters { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.meter { display: grid; grid-template-columns: auto 1fr auto; column-gap: 8px; align-items: center; }
+.meter:not(:has(.sw)) { grid-template-columns: 1fr auto; }
+.meter .track { grid-column: 1 / -1; display: block; height: 10px; margin-top: 4px; border: 1.5px solid var(--ink); border-radius: 99px; overflow: hidden; }
+.meter .track i { display: block; height: 100%; background: var(--ink); transform: scaleX(var(--p)); transform-origin: left; }
+.meter b { font-family: var(--display); font-weight: 400; }
+.meter small { grid-column: 1 / -1; color: var(--muted); font-size: 0.85rem; }
+.risk { color: var(--hanko); }
+.enter .meter .track i { animation: grow 600ms var(--ease-in-out) both; }
+.chart { margin: 0 0 20px; }
+.chart figcaption { font-weight: 700; margin-bottom: 4px; }
+.chart svg { display: block; width: 100%; height: auto; touch-action: pan-y; overflow: visible; }
+.chart .grid { stroke: var(--rule); stroke-width: 1; }
+.chart .ax { fill: var(--muted); font: 400 9px var(--body); }
+.chart .ln { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .pt { fill: var(--ink); }
+.chart .cross { stroke: var(--hanko); stroke-width: 1.5; }
+.chart .cdot { fill: var(--paper); stroke: var(--ink); stroke-width: 2; }
+.chart .tip { margin: 4px 0; font-size: 0.85rem; color: var(--muted); min-height: 1.3em; }
+.chart details summary { cursor: pointer; font-size: 0.85rem; text-decoration: underline; text-underline-offset: 3px; }
+.chart table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 6px; }
+.chart td { padding: 4px 0; border-bottom: 1px solid var(--rule); }
+.chart td + td { text-align: right; font-variant-numeric: tabular-nums; }
+@keyframes stroke { from { stroke-dashoffset: 1; } }
+.enter .chart .ln { stroke-dasharray: 1; stroke-dashoffset: 0; animation: stroke 700ms var(--ease-in-out) both; }
+.chart .pt { fill: var(--muted); opacity: 0.55; }
+.chart .ln { stroke-width: 2.5; }
+.chart .cross, .chart .cdot { visibility: hidden; }
+.chart svg.on .cross, .chart svg.on .cdot { visibility: visible; }
+.chart figcaption small { display: block; font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+.tiles .tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
