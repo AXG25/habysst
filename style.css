@@ -280,3 +280,30 @@ legend { font-weight: 700; padding: 0; margin-bottom: 8px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* Frequencies */
+.sub { margin: 28px 0 10px; font: 400 1.1rem/1.2 var(--display); }
+.rest .habit:not(.on) { border-style: dashed; }
+.manage small { display: block; font-weight: 400; color: var(--muted); font-size: 0.85rem; }
+.freq { margin-bottom: 16px; }
+.opts { display: grid; gap: 6px; }
+.opt { display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; }
+.opt input { width: 20px; height: 20px; accent-color: var(--ink); margin: 0; }
+.when-days, .when-weekly { display: none; margin-top: 10px; }
+.freq:has(input[value="days"]:checked) .when-days { display: grid; }
+.freq:has(input[value="weekly"]:checked) .when-weekly { display: grid; }
+.weekdays { grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.weekdays label { display: block; }
+.weekdays input { position: absolute; opacity: 0; }
+.weekdays span {
+  display: grid; place-items: center;
+  aspect-ratio: 1;
+  max-width: 44px;
+  margin: 0 auto;
+  border: 2px solid var(--ink); border-radius: 50%;
+  font-weight: 700;
+  cursor: pointer;
+}
+.weekdays input:checked + span { background: var(--ink); color: var(--paper); }
+.weekdays input:focus-visible + span { outline: 3px solid var(--hanko); outline-offset: 2px; }
+.field.inline { grid-template-columns: 1fr 88px; align-items: center; margin: 10px 0 0; font-weight: 400; }

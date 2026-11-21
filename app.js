@@ -1,5 +1,5 @@
-import { ymd, addDays, parseYmd, runs, longestRun, streaks, weeksOfMonth, monthRow } from './logic.js';
-import { load, save, fromJSON, toJSON, TONES } from './store.js';
+import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow } from './logic.js';
+import { load, save, fromJSON, toJSON, cleanFreq, TONES } from './store.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -18,9 +18,37 @@ const setOf = h => (state.done[h.id] ??= new Set());
 const cap = s => s[0].toUpperCase() + s.slice(1);
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
+// Per-render cache of each habit's periods, streaks and drawn days.
+let cache = new Map();
+function info(h) {
+  if (!cache.has(h.id)) {
+    const now = new Date(), done = setOf(h), ps = periods(h.freq, done, now);
+    cache.set(h.id, { ps, cov: covered(ps, done, now), ...streaks(ps) });
+  }
+  return cache.get(h.id);
+}
+const unit = (h, n) => (h.freq.type === 'weekly' ? plural(n, 'semana', 'semanas') : plural(n, 'día', 'días'));
+const freqLabel = f =>
+  f.type === 'days' ? f.days.map(i => WD[i]).join(' ') : f.type === 'weekly' ? `${f.times} ${f.times === 1 ? 'vez' : 'veces'} por semana` : 'Diario';
+const dueOn = (h, d) => h.freq.type !== 'days' || h.freq.days.includes(weekdayIdx(d));
+function weekCount(h, d) {
+  const mon = addDays(d, -weekdayIdx(d));
+  return Array.from({ length: 7 }, (_, i) => ymd(addDays(mon, i))).filter(k => setOf(h).has(k)).length;
+}
+// Share of finished periods met in [from, to]; null when nothing to measure yet.
+function rate(h, from, to) {
+  const ps = info(h).ps.filter(p => ymd(p.start) >= from && ymd(p.start) <= to);
+  return ps.length ? Math.round((100 * ps.filter(p => p.ok).length) / ps.length) : null;
+}
+function legendItem(h, n, from, to, scope) {
+  const r = rate(h, from, to);
+  return `<li><i class="sw t${h.tone}"></i><span>${esc(h.name)}</span><b>${plural(n, 'día', 'días')}</b>
+    <small>${r === null ? '' : `Cumplimiento ${r}%. `}Mejor racha ${scope}: ${unit(h, bestIn(info(h).ps, from, to))}</small></li>`;
+}
+
 // One bar per streak run. `cl`/`cr` mark a run that continues past the row edge.
 function bars(days, h, row, colOffset = 0) {
-  const set = setOf(h);
+  const set = info(h).cov;
   return runs(days, set).map(([s, e]) => {
     const cl = (s === 0 || !days[s - 1]) && set.has(ymd(addDays(days[s], -1)));
     const cr = (e === days.length - 1 || !days[e + 1]) && set.has(ymd(addDays(days[e], 1)));
@@ -43,23 +71,28 @@ function viewHoy() {
   if (!state.habits.length) return head + emptyState;
 
   const strip = Array.from({ length: 14 }, (_, i) => addDays(now, i - 13));
-  const doneToday = state.habits.filter(h => setOf(h).has(key)).length;
+  const due = state.habits.filter(h => dueOn(h, now));
+  const rest = state.habits.filter(h => !dueOn(h, now));
+  const doneToday = due.filter(h => setOf(h).has(key)).length;
+  const item = h => {
+    const on = setOf(h).has(key);
+    const { cur, best } = info(h);
+    const week = h.freq.type === 'weekly' ? `${weekCount(h, now)} de ${h.freq.times} esta semana. ` : '';
+    return `<li><button class="habit panel${on ? ' on' : ''}" data-act="toggle" data-h="${h.id}" data-d="${key}" aria-pressed="${on}">
+      <span class="check" aria-hidden="true"></span>
+      <span class="hname">${esc(h.name)}</span>
+      <span class="hmeta">${week}Racha ${unit(h, cur)}. Mejor: ${best}</span>
+      <span class="strip" aria-hidden="true">${bars(strip, h, 1)}</span>
+    </button></li>`;
+  };
   const daysSince = state.lastBackup ? Math.floor((now - new Date(state.lastBackup)) / 864e5) : null;
   const backupNote = daysSince === null || daysSince >= 7
     ? `<button class="note" data-act="export">${daysSince === null ? 'Aún no tienes respaldo.' : `Último respaldo hace ${daysSince} días.`} Exportar ahora</button>`
     : '';
 
-  return head + `<p class="count">${doneToday} de ${state.habits.length} hechos hoy</p>${backupNote}
-  <ul class="habits">${state.habits.map(h => {
-    const on = setOf(h).has(key);
-    const { cur, best } = streaks(setOf(h), now);
-    return `<li><button class="habit panel${on ? ' on' : ''}" data-act="toggle" data-h="${h.id}" data-d="${key}" aria-pressed="${on}">
-      <span class="check" aria-hidden="true"></span>
-      <span class="hname">${esc(h.name)}</span>
-      <span class="hmeta">Racha ${plural(cur, 'día', 'días')}. Mejor: ${best}</span>
-      <span class="strip" aria-hidden="true">${bars(strip, h, 1)}</span>
-    </button></li>`;
-  }).join('')}</ul>`;
+  return head + `<p class="count">${doneToday} de ${due.length} hechos hoy</p>${backupNote}
+  <ul class="habits">${due.map(item).join('')}</ul>
+  ${rest.length ? `<h2 class="sub">Hoy no toca</h2><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}`;
 }
 
 function viewMes() {
@@ -68,7 +101,6 @@ function viewMes() {
   if (!hs.length) return head + emptyState;
   const weeks = weeksOfMonth(y, m);
   const monthDays = weeks.flat().filter(Boolean);
-  const elapsed = monthDays.filter(d => ymd(d) <= t).length;
 
   return head + `<div class="cal panel">
     <div class="wd">${WD.map(d => `<span>${d}</span>`).join('')}</div>
@@ -81,10 +113,7 @@ function viewMes() {
       ${hs.map((h, j) => bars(w, h, j + 2)).join('')}
     </div>`).join('')}
   </div>
-  <ul class="legend">${hs.map(h => {
-    const n = monthDays.filter(d => setOf(h).has(ymd(d))).length;
-    return `<li><i class="sw t${h.tone}"></i><span>${esc(h.name)}</span><b>${n}/${elapsed}</b><small>Mejor racha del mes: ${longestRun(monthDays, setOf(h))}</small></li>`;
-  }).join('')}</ul>`;
+  <ul class="legend">${hs.map(h => legendItem(h, monthDays.filter(d => setOf(h).has(ymd(d))).length, ymd(monthDays[0]), ymd(monthDays.at(-1)), 'del mes')).join('')}</ul>`;
 }
 
 function viewAno() {
@@ -112,17 +141,14 @@ function viewAno() {
         ${hs.map((h, j) => bars(days, h, j + 1, 1)).join('')}</button>`;
     }).join('')}
   </div>
-  <ul class="legend">${hs.map(h => {
-    const n = yearDays.filter(d => setOf(h).has(ymd(d))).length;
-    return `<li><i class="sw t${h.tone}"></i><span>${esc(h.name)}</span><b>${plural(n, 'día', 'días')}</b><small>Mejor racha del año: ${longestRun(yearDays, setOf(h))}</small></li>`;
-  }).join('')}</ul>`;
+  <ul class="legend">${hs.map(h => legendItem(h, yearDays.filter(d => setOf(h).has(ymd(d))).length, `${y}-01-01`, `${y}-12-31`, 'del año')).join('')}</ul>`;
 }
 
 function viewHabitos() {
   const last = state.lastBackup ? new Date(state.lastBackup).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' }) : 'nunca';
   return header('Hábitos', plural(state.habits.length, 'activo', 'activos')) + `
   <ul class="manage">${state.habits.map(h => `<li class="panel">
-    <i class="sw t${h.tone}"></i><span>${esc(h.name)}</span>
+    <i class="sw t${h.tone}"></i><span>${esc(h.name)}<small>${freqLabel(h.freq)}</small></span>
     <button class="link" data-act="edit" data-h="${h.id}">Editar</button></li>`).join('')}</ul>
   <button class="btn wide" data-act="new">Crear hábito</button>
   <section class="panel backup">
@@ -137,6 +163,7 @@ function viewHabitos() {
 const views = { hoy: viewHoy, mes: viewMes, ano: viewAno, habitos: viewHabitos };
 
 function render() {
+  cache = new Map();
   $view.innerHTML = views[tab]();
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'));
 }
@@ -145,6 +172,7 @@ function toggle(hid, key) {
   const set = state.done[hid];
   if (!set) return;
   set.has(key) ? set.delete(key) : set.add(key);
+  cache = new Map();
   save(state);
 }
 
@@ -167,10 +195,19 @@ function openDay(key) {
 
 function openEditor(h) {
   const tone = h?.tone ?? state.habits.length % TONES;
+  const fq = h?.freq ?? { type: 'daily' };
+  const days = fq.type === 'days' ? fq.days : [0, 1, 2, 3, 4];
+  const times = fq.type === 'weekly' ? fq.times : 3;
+  const radio = (v, label) => `<label class="opt"><input type="radio" name="ftype" value="${v}"${fq.type === v ? ' checked' : ''}><span>${label}</span></label>`;
   $sheet.redraw = null;
   $sheet.innerHTML = `<form id="editor">
-    <h2>${h ? 'Editar hábito' : 'Nuevo hábito'}</h2>
+    <h2${h ? ' tabindex="-1" autofocus' : ''}>${h ? 'Editar hábito' : 'Nuevo hábito'}</h2>
     <label class="field">Nombre<input name="name" required maxlength="60" value="${h ? esc(h.name) : ''}" placeholder="Leer 20 minutos" autocomplete="off"></label>
+    <fieldset class="freq"><legend>Frecuencia</legend>
+      <div class="opts">${radio('daily', 'Diario')}${radio('days', 'Días concretos')}${radio('weekly', 'Veces por semana')}</div>
+      <div class="when-days weekdays" role="group" aria-label="Días">${WD.map((d, i) => `<label><input type="checkbox" name="days" value="${i}"${days.includes(i) ? ' checked' : ''}><span>${d}</span></label>`).join('')}</div>
+      <label class="when-weekly field inline">Veces por semana<input type="number" name="times" min="1" max="6" value="${times}" inputmode="numeric"></label>
+    </fieldset>
     <fieldset><legend>Trama</legend><div class="tones">
       ${TONE_NAMES.map((n, i) => `<label><input type="radio" name="tone" value="${i}"${i === tone ? ' checked' : ''}><i class="sw t${i}"></i><span>${n}</span></label>`).join('')}
     </div></fieldset>
@@ -183,10 +220,12 @@ function openEditor(h) {
     const f = new FormData(e.target);
     const name = f.get('name').trim();
     if (!name) return;
-    if (h) Object.assign(h, { name, tone: +f.get('tone') });
+    const freq = cleanFreq({ type: f.get('ftype'), days: f.getAll('days').map(Number), times: +f.get('times') });
+    if (f.get('ftype') !== freq.type) return alert(f.get('ftype') === 'days' ? 'Elige al menos un día.' : 'Las veces por semana van de 1 a 6.');
+    if (h) Object.assign(h, { name, tone: +f.get('tone'), freq });
     else {
       const id = crypto.randomUUID();
-      state.habits.push({ id, name, tone: +f.get('tone'), createdAt: new Date().toISOString() });
+      state.habits.push({ id, name, tone: +f.get('tone'), freq, createdAt: new Date().toISOString() });
       state.done[id] = new Set();
       navigator.storage?.persist?.(); // asks the browser not to evict our data
     }

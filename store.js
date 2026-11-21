@@ -2,6 +2,15 @@ const KEY = 'habysst';
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const TONES = 6;
 
+export function cleanFreq(f) {
+  if (f?.type === 'days' && Array.isArray(f.days)) {
+    const days = [...new Set(f.days.filter(d => Number.isInteger(d) && d >= 0 && d < 7))].sort();
+    if (days.length) return { type: 'days', days };
+  }
+  if (f?.type === 'weekly' && Number.isInteger(f.times) && f.times >= 1 && f.times <= 6) return { type: 'weekly', times: f.times };
+  return { type: 'daily' };
+}
+
 const fresh = () => ({ version: 1, habits: [], done: {}, lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
@@ -15,6 +24,7 @@ export function fromJSON(obj) {
       name: h.name.trim().slice(0, 60) || 'Sin nombre',
       tone: Number.isInteger(h.tone) && h.tone >= 0 ? h.tone % TONES : 0,
       createdAt: typeof h.createdAt === 'string' ? h.createdAt : null,
+      freq: cleanFreq(h.freq),
     }));
   const done = {};
   for (const h of habits) {
