@@ -1,4 +1,4 @@
-import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress, mondayOf, weekStats, reviewWeek } from './logic.js';
+import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress, mondayOf, weekStats, reviewWeek, sleepMins } from './logic.js';
 import { load, save, fromJSON, toJSON, cleanFreq, cleanGoal, cleanEntry, cleanReview, REVIEW_QS, TONES } from './store.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -94,7 +94,8 @@ function viewHoy() {
 
   return head + reviewNotice(now) + checkIn(key) + `<p class="count">${doneToday} de ${due.length} hechos hoy</p>${backupNote}
   <ul class="habits">${due.map(item).join('')}</ul>
-  ${rest.length ? `<h2 class="sub">Hoy no toca</h2><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}`;
+  ${rest.length ? `<h2 class="sub">Hoy no toca</h2><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}
+  ${state.metrics.length ? `<h2 class="sub">Métricas</h2>${metricRows(key)}` : ''}`;
 }
 
 const calSwitch = () => `<div class="seg" role="group" aria-label="Vista">
@@ -152,11 +153,16 @@ function viewAno() {
 
 function viewHabitos() {
   const last = state.lastBackup ? new Date(state.lastBackup).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' }) : 'nunca';
-  return header('Hábitos', plural(state.habits.length, 'activo', 'activos')) + `
+  return header('Ajustes', 'Hábitos, métricas y respaldo') + `
+  <h2 class="sub">Hábitos</h2>
   <ul class="manage">${state.habits.map(h => `<li class="panel">
     <i class="sw t${h.tone}"></i><span>${esc(h.name)}<small>${freqLabel(h.freq)}</small></span>
     <button class="link" data-act="edit" data-h="${h.id}">Editar</button></li>`).join('')}</ul>
   <button class="btn wide" data-act="new">Crear hábito</button>
+  <h2 class="sub">Métricas</h2>
+  ${state.metrics.length ? `<ul class="manage">${state.metrics.map(m => `<li class="panel"><span>${esc(m.name)}<small>${m.unit ? esc(m.unit) : 'Sin unidad'}</small></span>
+    <button class="link" data-act="metric-edit" data-m="${m.id}">Editar</button></li>`).join('')}</ul>` : ''}
+  <button class="btn ghost wide" data-act="metric-new">Crear métrica</button>
   <section class="panel backup">
     <h2>Respaldo</h2>
     <p>Tus datos se guardan solo en este teléfono. Exporta un respaldo y guárdalo en Drive, en tu correo o en Archivos. Para pasar tus datos a otro teléfono, importa ese archivo allí.</p>
@@ -354,7 +360,7 @@ function stamp(text) {
 
 // ---- Journal
 const LEVELS = ['Muy bajo', 'Bajo', 'Normal', 'Bueno', 'Muy bueno'];
-const KINDS = { mood: 'Ánimo', energy: 'Energía' };
+const KINDS = { mood: 'Ánimo', energy: 'Energía', sleep: 'Calidad' };
 const entryOf = k => state.journal[k];
 
 // Five steps from sparse screentone to solid ink: the scale reads without color or faces.
@@ -370,7 +376,7 @@ const scales = key => `<div class="scales">${scale5('mood', key)}${scale5('energ
 function checkIn(key) {
   const e = entryOf(key);
   const written = e?.text || Object.keys(e?.answers ?? {}).length;
-  return `<section class="checkin panel">${scales(key)}
+  return `<section class="checkin panel">${scales(key)}${sleepLine(key)}
     <button class="link" data-act="entry" data-d="${key}">${written ? 'Seguir escribiendo' : 'Escribir en el diario'}</button></section>`;
 }
 
@@ -438,7 +444,8 @@ function entryCards(q) {
   return `<ul class="entries">${hits.slice(0, 200).map(k => {
     const e = state.journal[k];
     const body = [...Object.values(e.answers), e.text].filter(Boolean).map(t => (/[.!?…]$/.test(t) ? t : `${t}.`)).join(' ');
-    const meta = [e.mood && `Ánimo: ${LEVELS[e.mood - 1].toLowerCase()}`, e.energy && `Energía: ${LEVELS[e.energy - 1].toLowerCase()}`].filter(Boolean).join('. ');
+    const sm = sleepMins(e.bed, e.wake);
+    const meta = [e.mood && `Ánimo: ${LEVELS[e.mood - 1].toLowerCase()}`, e.energy && `Energía: ${LEVELS[e.energy - 1].toLowerCase()}`, sm && `Sueño: ${dur(sm)}`].filter(Boolean).join('. ');
     return `<li><button class="entry-card panel" data-act="entry" data-d="${k}">
       <span class="ename">${longDate(k)}</span>
       ${meta ? `<span class="hmeta">${meta}.</span>` : ''}
@@ -563,6 +570,107 @@ function reviewList() {
     <button class="link" data-act="review" data-d="${k}">Abrir</button></li>`).join('')}</ul></details>` : '';
 }
 
+// ---- Sleep (stored on the day you wake up)
+const dur = mins => `${Math.floor(mins / 60)} h${mins % 60 ? ` ${mins % 60} min` : ''}`;
+function sleepLine(key) {
+  const e = entryOf(key), mins = sleepMins(e?.bed, e?.wake);
+  const txt = mins ? `${dur(mins)}${e.sleep ? `. Calidad: ${LEVELS[e.sleep - 1].toLowerCase()}` : ''}` : 'Sin registrar';
+  return `<button class="sleep-line" data-act="sleep" data-d="${key}"><span class="scale-l">Sueño</span><span>${txt}</span><span class="link">${mins ? 'Editar' : 'Registrar'}</span></button>`;
+}
+
+function lastSleep() {
+  const k = Object.keys(state.journal).sort().reverse().find(k => state.journal[k].bed);
+  return k ? state.journal[k] : { bed: '23:30', wake: '07:00' };
+}
+
+function openSleep(key) {
+  const e = entryOf(key) ?? {}, last = lastSleep();
+  $sheet.innerHTML = `<form method="dialog" id="sleepf" class="entry">
+    <h2 tabindex="-1" autofocus>Sueño</h2>
+    <p class="muted">La noche que termina el ${longDate(key).toLowerCase()}.</p>
+    <div class="nums two">
+      <label class="field">Me acosté<input type="time" name="bed" value="${e.bed ?? last.bed}"></label>
+      <label class="field">Me levanté<input type="time" name="wake" value="${e.wake ?? last.wake}"></label>
+    </div>
+    <p class="gline" id="sleepdur"></p>
+    <div class="scales">${scale5('sleep', key)}</div>
+    <p class="muted saved" aria-live="polite">Se guarda al cambiar.</p>
+    <div class="row"><button class="btn">Listo</button>
+    <button type="button" class="btn ghost" data-act="sleep-clear" data-d="${key}">Borrar sueño</button></div>
+  </form>`;
+  const form = $sheet.querySelector('#sleepf');
+  const show = () => { const m = sleepMins(form.bed.value, form.wake.value); form.querySelector('#sleepdur').textContent = m ? `Dormiste ${dur(m)}.` : ''; };
+  form.addEventListener('input', show);
+  show();
+  const flush = autosave(form, f => setEntry(key, { bed: f.get('bed') || null, wake: f.get('wake') || null }));
+  if (!e.bed) flush(); // opening the sheet with prefilled times records them; "Borrar sueño" undoes it
+  $sheet.redraw = () => { const sc = $sheet.querySelector('.scales'); if (sc) sc.innerHTML = scale5('sleep', key); };
+  if (!$sheet.open) $sheet.showModal();
+}
+
+// ---- Custom metrics
+const valOf = (m, key) => state.values[m.id]?.[key];
+function lastValue(m, before) {
+  const k = Object.keys(state.values[m.id] ?? {}).filter(k => k < before).sort().at(-1);
+  return k ? state.values[m.id][k] : null;
+}
+function metricRows(key) {
+  if (!state.metrics.length) return '';
+  return `<ul class="metrics">${state.metrics.map(m => {
+    const v = valOf(m, key), prev = lastValue(m, key);
+    return `<li><button class="metric panel" data-act="metric" data-m="${m.id}" data-d="${key}">
+      <span class="hname">${esc(m.name)}</span>
+      <b>${v === undefined ? '' : `${fmt(v)}${m.unit ? ` ${esc(m.unit)}` : ''}`}</b>
+      <span class="hmeta">${v === undefined ? 'Sin registrar' : ''}${prev !== null ? `${v === undefined ? '. ' : ''}Anterior: ${fmt(prev)}${m.unit ? ` ${esc(m.unit)}` : ''}` : ''}</span>
+    </button></li>`;
+  }).join('')}</ul>`;
+}
+
+function openMetric(id, key) {
+  const m = state.metrics.find(x => x.id === id), v = valOf(m, key);
+  $sheet.redraw = null;
+  $sheet.innerHTML = `<form id="metricf">
+    <h2>${esc(m.name)}</h2>
+    <p class="muted">${longDate(key)}</p>
+    <label class="field">Valor${m.unit ? ` (${esc(m.unit)})` : ''}<input name="v" type="number" step="any" inputmode="decimal" required value="${v ?? ''}" placeholder="${lastValue(m, key) ?? ''}"></label>
+    <div class="row"><button class="btn">Guardar</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
+    ${v !== undefined ? `<button type="button" class="link danger" data-act="metric-clear" data-m="${id}" data-d="${key}">Borrar el valor de este día</button>` : ''}
+  </form>`;
+  $sheet.querySelector('#metricf').onsubmit = e => {
+    e.preventDefault();
+    const n = parseFloat(e.target.v.value);
+    if (!Number.isFinite(n)) return alert('Escribe un número.');
+    (state.values[id] ??= {})[key] = n;
+    save(state);
+    $sheet.close();
+    render();
+  };
+  if (!$sheet.open) $sheet.showModal();
+}
+
+function openMetricEditor(m) {
+  $sheet.redraw = null;
+  $sheet.innerHTML = `<form id="meditor">
+    <h2${m ? ' tabindex="-1" autofocus' : ''}>${m ? 'Editar métrica' : 'Nueva métrica'}</h2>
+    <p class="muted">Algo que quieras medir con un número: peso, páginas leídas, dinero ahorrado, cigarrillos.</p>
+    <label class="field">Nombre<input name="name" required maxlength="40" value="${m ? esc(m.name) : ''}" placeholder="Peso" autocomplete="off"></label>
+    <label class="field">Unidad<input name="unit" maxlength="12" value="${m ? esc(m.unit) : ''}" placeholder="kg" autocomplete="off"></label>
+    <div class="row"><button class="btn">${m ? 'Guardar' : 'Crear métrica'}</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
+    ${m ? `<button type="button" class="link danger" data-act="metric-delete" data-m="${m.id}">Borrar métrica y sus valores</button>` : ''}
+  </form>`;
+  $sheet.querySelector('#meditor').onsubmit = e => {
+    e.preventDefault();
+    const name = e.target.name.value.trim(), unit = e.target.unit.value.trim();
+    if (!name) return;
+    if (m) Object.assign(m, { name, unit });
+    else { const id = crypto.randomUUID(); state.metrics.push({ id, name, unit }); state.values[id] = {}; }
+    save(state);
+    $sheet.close();
+    render();
+  };
+  $sheet.showModal();
+}
+
 const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : viewAno()), diario: viewDiario, metas: viewMetas, habitos: viewHabitos };
 
 // `enter` replays the ink-stroke reveal; only on navigation, never on a check-in.
@@ -591,7 +699,7 @@ function openDay(key) {
         return `<li><button type="button" class="habit compact panel${on ? ' on' : ''}" data-act="toggle" data-h="${h.id}" data-d="${key}" aria-pressed="${on}">
           <span class="check" aria-hidden="true"></span><span class="hname">${esc(h.name)}</span></button></li>`;
       }).join('')}</ul>
-      ${scales(key)}
+      ${scales(key)}${sleepLine(key)}${metricRows(key)}
       <div class="row"><button type="button" class="btn ghost" data-act="entry" data-d="${key}">${state.journal[key]?.text || Object.keys(state.journal[key]?.answers ?? {}).length ? 'Ver entrada del diario' : 'Escribir en el diario'}</button>
       <button class="btn">Listo</button></div></form>`;
   };
@@ -709,6 +817,21 @@ document.addEventListener('click', e => {
     case 'rate': return rate5(el.dataset.k, d, +el.dataset.v);
     case 'prompts': return savePrompts();
     case 'review': return openReview(d);
+    case 'sleep': return openSleep(d);
+    case 'sleep-clear': setEntry(d, { bed: null, wake: null, sleep: null }); save(state); $sheet.close(); return render();
+    case 'metric': return openMetric(el.dataset.m, d);
+    case 'metric-new': return openMetricEditor();
+    case 'metric-edit': return openMetricEditor(state.metrics.find(m => m.id === el.dataset.m));
+    case 'metric-clear': delete state.values[el.dataset.m]?.[d]; save(state); $sheet.close(); return render();
+    case 'metric-delete': {
+      const m = state.metrics.find(x => x.id === el.dataset.m);
+      if (!confirm(`¿Borrar "${m.name}" y todos sus valores? No se puede deshacer.`)) return;
+      state.metrics = state.metrics.filter(x => x !== m);
+      delete state.values[m.id];
+      save(state);
+      $sheet.close();
+      return render();
+    }
     case 'review-done': return finishReview(d);
     case 'new': return openEditor();
     case 'edit': return openEditor(state.habits.find(x => x.id === h));

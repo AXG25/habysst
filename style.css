@@ -452,3 +452,20 @@ dialog[open]::backdrop { background: rgb(0 0 0 / 0.45); }
 .legend.data { margin: 0; }
 .legend.data li:not(:has(.sw)) { grid-template-columns: 1fr auto; }
 .legend.data li:not(:has(.sw)) small { grid-column: 1 / -1; }
+
+/* Sleep + metrics */
+.sleep-line {
+  display: grid; grid-template-columns: 4.6rem 1fr auto; column-gap: 10px; align-items: center;
+  width: 100%; min-height: 44px; margin: 2px 0 6px; text-align: left;
+}
+.sleep-line .link { padding: 0; font-size: 0.9rem; }
+.nums.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.metrics { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.metric {
+  width: 100%; display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 10px;
+  padding: 12px 14px; text-align: left; transition: transform 160ms var(--ease-out);
+}
+.metric:active { transform: scale(0.98); }
+.metric b { font: 400 1.2rem/1 var(--display); }
+.metric .hmeta { grid-column: 1 / -1; }
+dialog .metrics { margin: 8px 0 12px; }

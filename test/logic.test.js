@@ -81,7 +81,7 @@ test('cleanGoal drops unknown habits and invalid fields', async () => {
 test('journal entries: empty ones vanish, scales are 1-5, prompts survive import', async () => {
   const { cleanEntry, fromJSON, toJSON } = await import('../store.js');
   assert.equal(cleanEntry({ mood: null, text: '   ', answers: { '¿Qué?': ' ' } }), null);
-  assert.deepEqual(cleanEntry({ mood: 7, energy: 2, text: 'ok' }), { mood: null, energy: 2, text: 'ok', answers: {} });
+  assert.deepEqual(cleanEntry({ mood: 7, energy: 2, text: 'ok' }), { mood: null, energy: 2, text: 'ok', answers: {}, sleep: null, bed: null, wake: null });
   const s = fromJSON({ version: 1, habits: [], done: {}, journal: { '2026-11-20': { mood: 4 }, bad: { mood: 3 }, '2026-11-21': {} }, prompts: ['A', ''] });
   assert.deepEqual(Object.keys(s.journal), ['2026-11-20']);
   assert.deepEqual(s.prompts, ['A']);
@@ -104,4 +104,17 @@ test('weekly review: stats per frequency, which week, and saved answers', async 
   assert.equal(ymd(mondayOf(d(10, 22))), '2026-11-16');
   assert.equal(cleanReview({ answers: { worked: ' ' } }), null);
   assert.deepEqual(cleanReview({ answers: { focus: 'Dormir 7 h' }, doneAt: '2026-11-22' }).answers.focus, 'Dormir 7 h');
+});
+
+test('sleep duration crosses midnight; entries keep only complete nights', async () => {
+  const { sleepMins } = await import('../logic.js');
+  const { cleanEntry, fromJSON } = await import('../store.js');
+  assert.equal(sleepMins('23:30', '07:10'), 460);
+  assert.equal(sleepMins('01:00', '08:00'), 420);
+  assert.equal(sleepMins('07:00', '07:00'), null);
+  assert.equal(cleanEntry({ bed: '23:00' }), null); // half a night is dropped
+  assert.deepEqual(cleanEntry({ bed: '23:00', wake: '25:00', sleep: 3 }).bed, null);
+  const s = fromJSON({ version: 1, habits: [], done: {}, metrics: [{ id: 'm', name: 'Peso', unit: 'kg' }, { id: 'x' }], values: { m: { '2026-11-20': 77.1, bad: 1, '2026-11-21': 'a' } } });
+  assert.deepEqual(s.metrics.map(m => m.id), ['m']);
+  assert.deepEqual(s.values.m, { '2026-11-20': 77.1 });
 });

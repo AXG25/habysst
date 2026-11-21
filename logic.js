@@ -122,3 +122,11 @@ export function weekStats(freq = { type: 'daily' }, done, monday, now) {
 
 // The week to review: the current one on Sunday, otherwise the one that just ended.
 export const reviewWeek = now => addDays(mondayOf(startOfDay(now)), now.getDay() === 0 ? 0 : -7);
+
+// Minutes slept between two "HH:MM" times, crossing midnight when needed.
+export function sleepMins(bed, wake) {
+  if (!bed || !wake) return null;
+  const m = t => { const [h, mm] = t.split(':').map(Number); return h * 60 + mm; };
+  const d = (m(wake) - m(bed) + 1440) % 1440;
+  return d || null;
+}

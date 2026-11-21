@@ -1,5 +1,6 @@
 const KEY = 'habysst';
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const TONES = 6;
 export const DEFAULT_PROMPTS = ['¿Qué salió bien hoy?', '¿Qué aprendí?', '¿Qué haré distinto mañana?'];
 
@@ -26,8 +27,10 @@ export function cleanEntry(e) {
     const t = str(a, 5000);
     if (t) answers[str(q, 120)] = t;
   }
-  const entry = { mood: scale(e.mood), energy: scale(e.energy), text: str(e.text, 20000), answers };
-  return entry.mood || entry.energy || entry.text || Object.keys(answers).length ? entry : null;
+  const time = x => (typeof x === 'string' && TIME.test(x) ? x : null);
+  const entry = { mood: scale(e.mood), energy: scale(e.energy), text: str(e.text, 20000), answers, sleep: scale(e.sleep), bed: time(e.bed), wake: time(e.wake) };
+  if (!entry.bed || !entry.wake) entry.bed = entry.wake = null; // a night needs both ends
+  return entry.mood || entry.energy || entry.text || entry.sleep || entry.bed || Object.keys(answers).length ? entry : null;
 }
 
 export const REVIEW_QS = ['worked', 'didnt', 'change', 'focus'];
@@ -66,7 +69,7 @@ export function cleanGoal(g, habitIds) {
   };
 }
 
-const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, lastBackup: null });
+const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, metrics: [], values: {}, lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
@@ -99,7 +102,15 @@ export function fromJSON(obj) {
     const review = cleanReview(r);
     if (DATE.test(k) && review) reviews[k] = review;
   }
-  return { version: 1, habits, done, goals, journal, prompts, reviews, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
+  const metrics = Array.isArray(obj.metrics)
+    ? obj.metrics.filter(m => m && typeof m.id === 'string' && str(m.name, 40)).map(m => ({ id: m.id, name: str(m.name, 40), unit: str(m.unit, 12) }))
+    : [];
+  const values = {};
+  for (const m of metrics) {
+    const src = obj.values?.[m.id];
+    values[m.id] = Object.fromEntries(Object.entries(src && typeof src === 'object' ? src : {}).filter(([k, v]) => DATE.test(k) && num(v) !== null));
+  }
+  return { version: 1, habits, done, goals, journal, prompts, reviews, metrics, values, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
 }
 
 export const toJSON = s => ({
@@ -109,6 +120,8 @@ export const toJSON = s => ({
   journal: s.journal,
   prompts: s.prompts,
   reviews: s.reviews,
+  metrics: s.metrics,
+  values: s.values,
   done: Object.fromEntries(s.habits.map(h => [h.id, [...(s.done[h.id] ?? [])].sort()])),
   lastBackup: s.lastBackup,
 });
