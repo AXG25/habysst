@@ -171,3 +171,13 @@ test('review periods: keys, ranges, previous period and which one to review', as
   assert.deepEqual(Object.keys(s.reviews), ['M-2026-11', 'Q-2026-4']);
   assert.deepEqual(s.compass, { values: ['Salud', 'a', 'b', 'c', 'd'], vision: 'Vivir cerca del mar' });
 });
+
+test('lists are validated on load and import', async () => {
+  const { fromJSON } = await import('../store.js');
+  const s = fromJSON({ version: 1, habits: [], done: {}, lists: [
+    { id: 'l1', name: ' Antes de morir ', items: [{ id: 'a', text: 'Ver auroras', done: true, doneAt: '2026-11-20' }, { id: 'b', text: '  ' }, { id: 'c', text: 'Japón', done: 'yes', doneAt: '2026-11-21' }] },
+    { id: 'l2', name: '' }] });
+  assert.equal(s.lists.length, 1);
+  assert.equal(s.lists[0].name, 'Antes de morir');
+  assert.deepEqual(s.lists[0].items.map(i => [i.text, i.done, i.doneAt]), [['Ver auroras', true, '2026-11-20'], ['Japón', false, null]]);
+});

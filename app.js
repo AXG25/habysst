@@ -241,9 +241,15 @@ const progressBar = s =>
 
 const ifThen = (a, b) => (a || b ? `<p class="plan">Si ${esc(a || '…')}, entonces ${esc(b || '…')}.</p>` : '');
 
+let metasMode = 'metas', openList = null, listEdit = false;
+const metasSwitch = () => `<div class="seg" role="group" aria-label="Vista">
+  <button data-act="metas-mode" data-m="metas" aria-pressed="${metasMode === 'metas'}">Metas</button>
+  <button data-act="metas-mode" data-m="listas" aria-pressed="${metasMode === 'listas'}">Listas</button></div>`;
+
 function viewMetas() {
+  if (metasMode === 'listas') return viewListas();
   const act = activeGoals(), closed = state.goals.filter(g => g.status !== 'active');
-  return header('Metas', `${act.length} de ${MAX_GOALS} activas`) + compassBox() +
+  return header('Metas', `${act.length} de ${MAX_GOALS} activas`) + metasSwitch() + compassBox() +
     (act.length
       ? `<ul class="goals">${act.map((g, i) => {
           const s = goalSummary(g);
@@ -1099,6 +1105,97 @@ function openCompass() {
   $sheet.showModal();
 }
 
+// Re-renders, then lets rows that changed place glide there instead of jumping.
+function glide(selector, key, update) {
+  const rows = () => document.querySelectorAll(selector);
+  const before = new Map([...rows()].map(b => [b.dataset[key], b.getBoundingClientRect().top]));
+  update();
+  if (reduceMotion.matches) return;
+  rows().forEach(b => {
+    const el = b.closest('li') ?? b;
+    // Something new (like the "Hechas" heading) fades in once the others have moved.
+    if (!before.has(b.dataset[key])) return el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 420, fill: 'backwards', easing: 'ease' });
+    const dy = before.get(b.dataset[key]) - b.getBoundingClientRect().top;
+    if (Math.abs(dy) > 1) el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+      { duration: 460, delay: 90, fill: 'backwards', easing: 'cubic-bezier(0.77, 0, 0.175, 1)' });
+  });
+}
+
+// ---- Lists
+function viewListas() {
+  const l = state.lists.find(x => x.id === openList);
+  if (!l) {
+    openList = null;
+    const cards = state.lists.map(x => {
+      const n = x.items.filter(i => i.done).length;
+      return `<li><button class="listcard panel" data-act="list-open" data-l="${x.id}">
+        <span class="hname">${esc(x.name)}</span><span class="hmeta">${x.items.length ? `${n} de ${x.items.length} hechas` : 'Vacía'}</span>
+        <i class="track"><i style="--p:${x.items.length ? n / x.items.length : 0}"></i></i></button></li>`;
+    }).join('');
+    return header('Listas', plural(state.lists.length, 'lista', 'listas')) + metasSwitch() +
+      (cards ? `<ul class="lists">${cards}</ul>` : `<p class="muted">Crea listas para lo que quieras: la compra, viajes, libros por leer o las cosas que quieres hacer antes de morir.</p>
+        <div class="chips wrap">${['Supermercado', 'Antes de morir', 'Libros por leer'].map(n => `<button class="chip" data-act="list-new" data-n="${n}">${n}</button>`).join('')}</div>`) +
+      `<button class="btn wide" data-act="list-new">Crear lista</button>`;
+  }
+  const pending = l.items.filter(i => !i.done);
+  const done = l.items.filter(i => i.done).sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
+  const row = i => `<li><button class="item${i.done ? ' done' : ''}" data-act="item" data-i="${i.id}" aria-pressed="${i.done}">
+      <span class="box" aria-hidden="true"></span><span class="txt">${esc(i.text)}</span>${i.done && i.doneAt ? `<small>${fmtDate(i.doneAt)}</small>` : ''}</button>
+      ${listEdit ? `<button class="del" data-act="item-del" data-i="${i.id}" aria-label="Borrar ${esc(i.text)}"></button>` : ''}</li>`;
+  return `<header class="hero"><button class="nav" data-act="list-back" aria-label="Volver a las listas">‹</button>
+      <div><h1>${esc(l.name)}</h1><p>${l.items.length ? `${done.length} de ${l.items.length} hechas` : 'Vacía'}</p></div></header>
+    <form id="additem" class="additem"><input id="newitem" maxlength="200" placeholder="Añadir a la lista" autocomplete="off" enterkeyhint="done" aria-label="Nuevo elemento">
+      <button class="btn">Añadir</button></form>
+    ${pending.length ? `<ul class="items">${pending.map(row).join('')}</ul>` : l.items.length ? '<p class="muted">Todo hecho.</p>' : ''}
+    ${done.length ? `<h3 class="sub-sm" data-i="done-h">Hechas (${done.length})</h3><ul class="items">${done.map(row).join('')}</ul>` : ''}
+    <div class="row list-tools">
+      ${l.items.length ? `<button class="link" data-act="list-edit">${listEdit ? 'Listo' : 'Borrar elementos'}</button>` : ''}
+      ${done.length ? `<button class="link" data-act="list-clear">Quitar las hechas</button>` : ''}
+      <button class="link" data-act="list-rename">Renombrar o borrar lista</button>
+    </div>`;
+}
+
+function createList(name) {
+  const id = crypto.randomUUID();
+  state.lists.push({ id, name, items: [] });
+  save(state);
+  // No slide here: the keyboard opening resizes the viewport, which would cut the transition short.
+  openList = id;
+  listEdit = false;
+  render();
+  document.getElementById('newitem')?.focus();
+}
+
+function openListEditor(l) {
+  $sheet.redraw = null;
+  $sheet.innerHTML = `<form id="listf">
+    <h2>${l ? 'Lista' : 'Nueva lista'}</h2>
+    <label class="field">Nombre<input name="name" required maxlength="60" value="${l ? esc(l.name) : ''}" placeholder="Antes de morir" autocomplete="off"></label>
+    <div class="row"><button class="btn">${l ? 'Guardar' : 'Crear lista'}</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
+    ${l ? `<button type="button" class="link danger" data-act="list-delete" data-l="${l.id}">Borrar lista</button>` : ''}
+  </form>`;
+  $sheet.querySelector('#listf').onsubmit = e => {
+    e.preventDefault();
+    const name = e.target.name.value.trim();
+    if (!name) return;
+    $sheet.close();
+    if (l) { l.name = name; save(state); render(); } else createList(name);
+  };
+  $sheet.showModal();
+}
+
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'additem') return;
+  e.preventDefault();
+  const input = e.target.querySelector('#newitem'), text = input.value.trim();
+  if (!text) return;
+  state.lists.find(x => x.id === openList).items.push({ id: crypto.randomUUID(), text: text.slice(0, 200), done: false, doneAt: null });
+  save(state);
+  render();
+  document.getElementById('newitem').focus(); // keep the keyboard up for the next item
+  document.querySelector('#view .items:first-of-type li:last-child')?.classList.add('added');
+});
+
 const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : calMode === 'ano' ? viewAno() : viewAnalisis()), diario: viewDiario, metas: viewMetas, habitos: viewHabitos };
 
 // `enter` replays the ink-stroke reveal; only on navigation, never on a check-in.
@@ -1230,15 +1327,10 @@ document.addEventListener('click', e => {
   const step = calMode === 'ano' ? 12 : 1;
   switch (act) {
     case 'toggle': {
-      const rows = () => document.querySelectorAll('#view .habits [data-act="toggle"]');
-      const before = new Map([...rows()].map(b => [b.dataset.h, b.getBoundingClientRect().top]));
-      toggle(h, d);
-      if ($sheet.open && $sheet.redraw) $sheet.redraw();
-      render();
-      if (!reduceMotion.matches) rows().forEach(b => {
-        const dy = (before.get(b.dataset.h) ?? NaN) - b.getBoundingClientRect().top;
-        if (Math.abs(dy) > 1) b.parentElement.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
-          { duration: 460, delay: 90, fill: 'backwards', easing: 'cubic-bezier(0.77, 0, 0.175, 1)' });
+      glide('#view .habits [data-act="toggle"]', 'h', () => {
+        toggle(h, d);
+        if ($sheet.open && $sheet.redraw) $sheet.redraw();
+        render();
       });
       // Animate only the check-in that changed, not the whole list.
       document.querySelectorAll(`[data-act="toggle"][data-h="${h}"][data-d="${d}"]`).forEach(b => b.classList.add('pop'));
@@ -1258,6 +1350,44 @@ document.addEventListener('click', e => {
     case 'rate': return rate5(el.dataset.k, d, +el.dataset.v);
     case 'prompts': return savePrompts();
     case 'review': return openReview(d);
+    case 'metas-mode': { const m = el.dataset.m; return go(() => { metasMode = m; render(true); }, m === 'listas' ? 'fwd' : 'back'); }
+    case 'list-open': { const id = el.dataset.l; return go(() => { openList = id; listEdit = false; render(); }, 'fwd'); }
+    case 'list-back': return go(() => { openList = null; listEdit = false; render(); }, 'back');
+    case 'list-new': return el.dataset.n ? createList(el.dataset.n) : openListEditor();
+    case 'list-edit': listEdit = !listEdit; return render();
+    case 'list-rename': return openListEditor(state.lists.find(l => l.id === openList));
+    case 'item': {
+      const l = state.lists.find(x => x.id === openList), it = l.items.find(x => x.id === el.dataset.i);
+      glide('#view .items [data-act="item"], #view [data-i="done-h"]', 'i', () => {
+        Object.assign(it, { done: !it.done, doneAt: it.done ? null : ymd(new Date()) });
+        save(state);
+        render();
+      });
+      document.querySelector(`[data-act="item"][data-i="${it.id}"]`)?.classList.add('pop');
+      return;
+    }
+    case 'item-del': {
+      const l = state.lists.find(x => x.id === openList);
+      l.items = l.items.filter(x => x.id !== el.dataset.i);
+      save(state);
+      return render();
+    }
+    case 'list-clear': {
+      const l = state.lists.find(x => x.id === openList), n = l.items.filter(x => x.done).length;
+      if (!confirm(`¿Quitar ${plural(n, 'elemento hecho', 'elementos hechos')} de "${l.name}"?`)) return;
+      l.items = l.items.filter(x => !x.done);
+      save(state);
+      return render();
+    }
+    case 'list-delete': {
+      const l = state.lists.find(x => x.id === el.dataset.l);
+      if (!confirm(`¿Borrar la lista "${l.name}" y todo lo que tiene? No se puede deshacer.`)) return;
+      state.lists = state.lists.filter(x => x !== l);
+      openList = null;
+      save(state);
+      $sheet.close();
+      return render();
+    }
     case 'compass': return openCompass();
     case 'sleep': return openSleep(d);
     case 'editmode':
@@ -1370,7 +1500,8 @@ const TABS = ['hoy', 'rachas', 'diario', 'metas', 'habitos'];
 function go(update, dir = '') {
   if (!document.startViewTransition || reduceMotion.matches) return update();
   document.documentElement.dataset.dir = dir;
-  document.startViewTransition(update);
+  // A resize mid-transition (keyboard, rotation) aborts it; the update still applies, so nothing to report.
+  document.startViewTransition(update).ready.catch(() => {});
 }
 
 // The new theme spreads from the button you pressed.
@@ -1383,7 +1514,7 @@ function themeReveal(v, x, y) {
     const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
     document.documentElement.animate({ clipPath: [`circle(0 at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
       { duration: 560, easing: 'cubic-bezier(0.77, 0, 0.175, 1)', pseudoElement: '::view-transition-new(root)' });
-  });
+  }).catch(() => {}); // aborted (e.g. resize): the theme is applied anyway
 }
 
 // Sheets: drag the handle or title down to dismiss. A quick flick is enough; dragging up meets friction.

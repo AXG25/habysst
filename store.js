@@ -70,7 +70,7 @@ export function cleanGoal(g, habitIds) {
   };
 }
 
-const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, compass: { values: [], vision: '' }, metrics: [], values: {}, focus: [], timer: null, lastBackup: null });
+const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, compass: { values: [], vision: '' }, lists: [], metrics: [], values: {}, focus: [], timer: null, lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
@@ -121,7 +121,15 @@ export function fromJSON(obj) {
   if (timer && ['work', 'break', 'ready'].includes(t.phase) && Number.isInteger(t.pomo) && t.pomo >= 0) Object.assign(timer, { phase: t.phase, pomo: t.pomo });
   const c = obj.compass ?? {};
   const compass = { values: (Array.isArray(c.values) ? c.values : []).map(v => str(v, 40)).filter(Boolean).slice(0, 5), vision: str(c.vision, 1000) };
-  return { version: 1, habits, done, goals, journal, prompts, reviews, compass, metrics, values, focus, timer, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
+  const lists = (Array.isArray(obj.lists) ? obj.lists : [])
+    .filter(l => l && typeof l.id === 'string' && str(l.name, 60))
+    .map(l => ({
+      id: l.id,
+      name: str(l.name, 60),
+      items: (Array.isArray(l.items) ? l.items : []).filter(i => i && typeof i.id === 'string' && str(i.text, 200))
+        .map(i => ({ id: i.id, text: str(i.text, 200), done: i.done === true, doneAt: i.done === true ? date(i.doneAt) : null })),
+    }));
+  return { version: 1, habits, done, goals, journal, prompts, reviews, compass, lists, metrics, values, focus, timer, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
 }
 
 export const toJSON = s => ({
@@ -132,6 +140,7 @@ export const toJSON = s => ({
   prompts: s.prompts,
   reviews: s.reviews,
   compass: s.compass,
+  lists: s.lists,
   metrics: s.metrics,
   values: s.values,
   focus: s.focus,
