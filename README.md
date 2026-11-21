@@ -1,4 +1,4 @@
-# Habysst
+# HabyssT
 
 Seguimiento de hábitos con calendario mensual y anual de rachas. Funciona sin conexión y se instala como app desde el navegador.
 

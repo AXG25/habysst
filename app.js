@@ -63,7 +63,7 @@ const header = (title, sub, nav = '', brand = false) =>
   `<header class="hero">${nav ? `<button class="nav" data-act="prev" aria-label="Anterior">‹</button>` : ''}
     <div><h1>${title}</h1><p>${sub}</p></div>
     ${nav ? `<button class="nav" data-act="next" aria-label="Siguiente">›</button>` : ''}
-    ${brand ? `<span class="brand" aria-label="Habysst">HabyssT</span>` : ''}</header>`;
+    ${brand ? `<span class="brand" aria-label="HabyssT">HabyssT</span>` : ''}</header>`;
 
 // UI-only preferences for this device; never part of the backup.
 const ui = (() => { try { return JSON.parse(localStorage.getItem('habysst:ui')) ?? {}; } catch { return {}; } })();
@@ -665,6 +665,18 @@ function metricRows(key, editing = false) {
   }).join('')}</ul>`;
 }
 
+// Every value lives in state.values[metricId][YYYY-MM-DD]; this shows the latest ones.
+function history(m) {
+  const rows = Object.entries(state.values[m.id] ?? {}).sort((a, b) => b[0].localeCompare(a[0]));
+  if (!rows.length) return '';
+  const u = m.unit ? ` ${esc(m.unit)}` : '';
+  return `<h3>Historial</h3><ul class="log">${rows.slice(0, 10).map(([k, v], i) => {
+    const prev = rows[i + 1]?.[1], diff = prev === undefined ? '' : v - prev;
+    return `<li><span>${longDate(k)}</span><b>${fmt(v)}${u}${diff ? `<small> (${diff > 0 ? '+' : ''}${fmt(Math.round(diff * 100) / 100)})</small>` : ''}</b></li>`;
+  }).join('')}</ul>
+  <p class="muted small">${rows.length > 10 ? `Mostrando 10 de ${rows.length} registros. ` : ''}La gráfica completa está en Progreso, Análisis.</p>`;
+}
+
 function openMetric(id, key) {
   const m = state.metrics.find(x => x.id === id), v = valOf(m, key);
   $sheet.redraw = null;
@@ -673,6 +685,7 @@ function openMetric(id, key) {
     <p class="muted">${longDate(key)}</p>
     <label class="field">Valor${m.unit ? ` (${esc(m.unit)})` : ''}<input name="v" type="number" step="any" inputmode="decimal" required value="${v ?? ''}" placeholder="${lastValue(m, key) ?? ''}"></label>
     <div class="row"><button class="btn">Guardar</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
+    ${history(m)}
     ${v !== undefined ? `<button type="button" class="link danger" data-act="metric-clear" data-m="${id}" data-d="${key}">Borrar el valor de este día</button>` : ''}
   </form>`;
   $sheet.querySelector('#metricf').onsubmit = e => {
@@ -1106,10 +1119,10 @@ function openEditor(h) {
 async function exportBackup() {
   const prev = state.lastBackup;
   state.lastBackup = new Date().toISOString();
-  const name = `habysst-${ymd(new Date())}.json`;
+  const name = `HabyssT-${ymd(new Date())}.json`;
   const file = new File([JSON.stringify(toJSON(state), null, 1)], name, { type: 'application/json' });
   try {
-    if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: 'Respaldo de Habysst' });
+    if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: 'Respaldo de HabyssT' });
     else {
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(file), download: name });
       a.click();

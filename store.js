@@ -74,7 +74,7 @@ const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {},
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
   if (!obj || obj.version !== 1 || !Array.isArray(obj.habits) || typeof obj.done !== 'object' || !obj.done)
-    throw new Error('Este archivo no es un respaldo de Habysst.');
+    throw new Error('Este archivo no es un respaldo de HabyssT.');
   const habits = obj.habits
     .filter(h => h && typeof h.id === 'string' && typeof h.name === 'string')
     .map(h => ({

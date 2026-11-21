@@ -616,3 +616,5 @@ body.zen-on { overflow: hidden; }
   text-align: center;
   transform: rotate(-6deg);
 }
+#metricf h3 { margin: 22px 0 6px; font-size: 1rem; }
+.log b small { font-family: var(--body); font-weight: 400; color: var(--muted); }
