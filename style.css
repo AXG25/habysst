@@ -130,6 +130,14 @@ main {
 .t3 { background-image: repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 4px), repeating-linear-gradient(-45deg, var(--ink) 0 1px, transparent 1px 4px); }
 .t4 { background-image: repeating-linear-gradient(90deg, var(--ink) 0 1.3px, transparent 1.3px 3.5px); }
 .t5 { background: var(--hanko); }
+.t6 { background-image: radial-gradient(var(--ink) 0.7px, transparent 0.9px); background-size: 2.6px 2.6px; }
+.t7 { background-image: repeating-linear-gradient(0deg, var(--ink) 0 1.3px, transparent 1.3px 3.5px); }
+.t8 { background-image: repeating-linear-gradient(45deg, var(--ink) 0 2.4px, transparent 2.4px 4.8px); }
+.t9 { background-image: repeating-conic-gradient(var(--ink) 0 25%, transparent 0 50%); background-size: 5px 5px; }
+.t10 { background-image: radial-gradient(var(--hanko) 1.2px, transparent 1.5px); background-size: 4px 4px; }
+.t11 { background-image: repeating-linear-gradient(-45deg, var(--hanko) 0 1.6px, transparent 1.6px 4px); }
+/* Red patterns keep an ink outline so they read as part of the same set */
+.t10.bar, .t11.bar, .t10.sw, .t11.sw { border-color: var(--ink); }
 
 .sw {
   display: inline-block;
@@ -257,7 +265,9 @@ dialog .habits { margin: 8px 0 16px; }
 }
 fieldset { border: 0; margin: 0; padding: 0; }
 legend { font-weight: 700; padding: 0; margin-bottom: 8px; }
-.tones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tones { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tones span { font-size: 0.75rem; text-align: center; line-height: 1.2; }
+.tones .sw { width: 40px; }
 .tones label {
   display: grid; justify-items: center; gap: 6px;
   padding: 10px 4px;

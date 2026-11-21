@@ -51,6 +51,8 @@ test('weeks start on Monday and month rows are 31 long', () => {
 test('fromJSON rejects foreign files, defaults freq and round-trips data', () => {
   assert.throws(() => fromJSON({ foo: 1 }));
   const s = fromJSON({ version: 1, habits: [{ id: 'a', name: ' Leer ', tone: 7 }], done: { a: ['2026-01-01', 'bad'] }, lastBackup: null });
+  assert.equal(s.habits[0].tone, 7);
+  assert.equal(fromJSON({ version: 1, habits: [{ id: 'b', name: 'x', tone: 13 }], done: {} }).habits[0].tone, 1);
   assert.equal(s.habits[0].name, 'Leer');
   assert.deepEqual(s.habits[0].freq, DAILY);
   assert.deepEqual(toJSON(s).done, { a: ['2026-01-01'] });
@@ -193,4 +195,13 @@ test('data protection helpers: emptiness, snapshot pruning and summaries', async
   assert.ok(drop.every(k => keys.filter(x => x.startsWith('snap:') && x > k).length >= 30)); // only the oldest go
   assert.deepEqual(summarize({ version: 1, habits: [{ id: 'h', name: 'Leer' }], done: { h: ['2026-11-20', '2026-11-21'] }, journal: { '2026-11-21': { mood: 3 } } }),
     { habits: 1, checks: 2, entries: 1, goals: 0, lists: 0 });
+});
+
+test('ids from a backup file must be plain: no HTML, no __proto__', async () => {
+  const { fromJSON } = await import('../store.js');
+  const s = fromJSON({ version: 1, done: {}, habits: [
+    { id: 'x"><img src=x onerror=alert(1)>', name: 'Malo' }, { id: '__proto__', name: 'Proto' }, { id: 'c0ffee-12_ab', name: 'Bueno' }],
+    lists: [{ id: 'l"', name: 'L', items: [] }, { id: 'l1', name: 'L1', items: [{ id: '<i>', text: 't' }, { id: 'i1', text: 'ok' }] }] });
+  assert.deepEqual(s.habits.map(h => h.id), ['c0ffee-12_ab']);
+  assert.deepEqual(s.lists.map(l => [l.id, l.items.map(i => i.id)]), [['l1', ['i1']]]);
 });

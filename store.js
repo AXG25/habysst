@@ -1,7 +1,9 @@
 const KEY = 'habysst';
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+// Ids go into HTML attributes and object keys, so only plain ids are accepted (the app makes UUIDs).
+const isId = x => typeof x === 'string' && /^[\w-]{1,64}$/.test(x) && !['__proto__', 'constructor', 'prototype'].includes(x);
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
-export const TONES = 6;
+export const TONES = 12;
 export const DEFAULT_PROMPTS = ['¿Qué salió bien hoy?', '¿Qué aprendí?', '¿Qué haré distinto mañana?'];
 
 export function cleanFreq(f) {
@@ -45,7 +47,7 @@ export function cleanReview(r) {
 
 export function cleanGoal(g, habitIds) {
   const title = str(g?.title, 80);
-  if (!title || typeof g.id !== 'string') return null;
+  if (!title || !isId(g.id)) return null;
   const kind = g.kind === 'steps' ? 'steps' : 'number';
   const start = num(g.start) ?? 0;
   return {
@@ -77,7 +79,7 @@ export function fromJSON(obj) {
   if (!obj || obj.version !== 1 || !Array.isArray(obj.habits) || typeof obj.done !== 'object' || !obj.done)
     throw new Error('Este archivo no es un respaldo de HabyssT.');
   const habits = obj.habits
-    .filter(h => h && typeof h.id === 'string' && typeof h.name === 'string')
+    .filter(h => h && isId(h.id) && typeof h.name === 'string')
     .map(h => ({
       id: h.id,
       name: h.name.trim().slice(0, 60) || 'Sin nombre',
@@ -104,7 +106,7 @@ export function fromJSON(obj) {
     if (REVIEW_KEY.test(k) && review) reviews[k] = review;
   }
   const metrics = Array.isArray(obj.metrics)
-    ? obj.metrics.filter(m => m && typeof m.id === 'string' && str(m.name, 40)).map(m => ({ id: m.id, name: str(m.name, 40), unit: str(m.unit, 12) }))
+    ? obj.metrics.filter(m => m && isId(m.id) && str(m.name, 40)).map(m => ({ id: m.id, name: str(m.name, 40), unit: str(m.unit, 12) }))
     : [];
   const values = {};
   for (const m of metrics) {
@@ -122,11 +124,11 @@ export function fromJSON(obj) {
   const c = obj.compass ?? {};
   const compass = { values: (Array.isArray(c.values) ? c.values : []).map(v => str(v, 40)).filter(Boolean).slice(0, 5), vision: str(c.vision, 1000) };
   const lists = (Array.isArray(obj.lists) ? obj.lists : [])
-    .filter(l => l && typeof l.id === 'string' && str(l.name, 60))
+    .filter(l => l && isId(l.id) && str(l.name, 60))
     .map(l => ({
       id: l.id,
       name: str(l.name, 60),
-      items: (Array.isArray(l.items) ? l.items : []).filter(i => i && typeof i.id === 'string' && str(i.text, 200))
+      items: (Array.isArray(l.items) ? l.items : []).filter(i => i && isId(i.id) && str(i.text, 200))
         .map(i => ({ id: i.id, text: str(i.text, 200), done: i.done === true, doneAt: i.done === true ? date(i.doneAt) : null })),
     }));
   return { version: 1, habits, done, goals, journal, prompts, reviews, compass, lists, metrics, values, focus, timer, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };

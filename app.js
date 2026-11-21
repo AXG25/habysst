@@ -4,7 +4,7 @@ import { load, save, fromJSON, toJSON, hasData, loadProblem, recover, snapshot, 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const WD = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-const TONE_NAMES = ['Tinta', 'Puntos', 'Diagonal', 'Rejilla', 'Rayado', 'Rojo'];
+const TONE_NAMES = ['Tinta', 'Puntos', 'Diagonal', 'Rejilla', 'Rayado', 'Rojo', 'Puntos finos', 'Horizontal', 'Inversa', 'Ajedrez', 'Puntos rojos', 'Rayas rojas'];
 
 let state = load();
 let tab = 'hoy';
@@ -1238,7 +1238,8 @@ function openDay(key) {
 }
 
 function openEditor(h) {
-  const tone = h?.tone ?? state.habits.length % TONES;
+  const used = new Set(state.habits.map(x => x.tone));
+  const tone = h?.tone ?? [...Array(TONES).keys()].find(i => !used.has(i)) ?? state.habits.length % TONES;
   const fq = h?.freq ?? { type: 'daily' };
   const days = fq.type === 'days' ? fq.days : [0, 1, 2, 3, 4];
   const times = fq.type === 'weekly' ? fq.times : 3;
