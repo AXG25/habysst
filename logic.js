@@ -145,3 +145,24 @@ export function compareDays(keys, measure, cond, minN = 5) {
   if (yes.length < minN || no.length < minN) return null;
   return { yes: mean(yes), no: mean(no), nYes: yes.length, nNo: no.length };
 }
+
+// Moves a pomodoro through every phase change due by `now` (also after the app was closed):
+// work 25 -> break 5 (15 after every 4th) -> ready. Returns the finished work blocks.
+export function advancePomodoro(timer, now) {
+  const t = { ...timer }, sessions = [];
+  while (t.phase !== 'ready') {
+    const end = Date.parse(t.start) + t.target * 60000;
+    if (now < end) break;
+    if (t.phase === 'work') {
+      sessions.push({ start: t.start, mins: t.target, goal: t.goal });
+      t.pomo += 1;
+      t.phase = 'break';
+      t.target = t.pomo % 4 === 0 ? 15 : 5;
+    } else {
+      t.phase = 'ready';
+      t.target = null;
+    }
+    t.start = new Date(end).toISOString();
+  }
+  return { timer: t, sessions };
+}

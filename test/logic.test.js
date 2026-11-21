@@ -137,3 +137,18 @@ test('compareDays needs enough days on both sides and skips unknown days', async
   assert.equal(compareDays(keys, energy, ran, 6), null);
   assert.equal(compareDays(keys, energy, () => null), null);
 });
+
+test('pomodoro advances through every phase, even after the app was closed', async () => {
+  const { advancePomodoro } = await import('../logic.js');
+  const t0 = Date.parse('2026-11-21T09:00:00.000Z');
+  const start = { start: new Date(t0).toISOString(), target: 25, goal: 'g', phase: 'work', pomo: 0 };
+  assert.equal(advancePomodoro(start, t0 + 24 * 60000).timer.phase, 'work');
+  let r = advancePomodoro(start, t0 + 26 * 60000);
+  assert.deepEqual([r.timer.phase, r.timer.target, r.timer.pomo, r.sessions.length], ['break', 5, 1, 1]);
+  assert.deepEqual(r.sessions[0], { start: start.start, mins: 25, goal: 'g' });
+  r = advancePomodoro(start, t0 + 3 * 3600000); // gone for hours: work then break, then waits
+  assert.deepEqual([r.timer.phase, r.timer.pomo, r.sessions.length], ['ready', 1, 1]);
+  assert.equal(r.timer.start, new Date(t0 + 30 * 60000).toISOString());
+  r = advancePomodoro({ ...start, pomo: 3 }, t0 + 26 * 60000);
+  assert.equal(r.timer.target, 15); // every 4th break is long
+});

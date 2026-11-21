@@ -1,4 +1,4 @@
-import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress, mondayOf, weekStats, reviewWeek, sleepMins, mean, compareDays } from './logic.js';
+import { ymd, addDays, parseYmd, runs, periods, streaks, bestIn, covered, weekdayIdx, weeksOfMonth, monthRow, goalProgress, mondayOf, weekStats, reviewWeek, sleepMins, mean, compareDays, advancePomodoro } from './logic.js';
 import { load, save, fromJSON, toJSON, cleanFreq, cleanGoal, cleanEntry, cleanReview, REVIEW_QS, TONES } from './store.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -694,32 +694,95 @@ function focusBox(key) {
   }
   const goal = state.goals.find(g => g.id === t.goal);
   return `<section class="focusbox running panel" aria-live="off">
-    <span class="hmeta" id="clocklabel">${t.target ? 'Tiempo restante' : 'Tiempo en sesión'}</span>
+    <span class="hmeta" id="clocklabel">${phaseLabel()}</span>
     <span class="clock" id="clock">${clockText()}</span>
     ${goal ? `<span class="hmeta">Para: ${esc(goal.title)}</span>` : ''}
-    <div class="row"><button class="btn" data-act="focus-stop">Terminar</button><button class="btn ghost" data-act="focus-cancel">Descartar</button></div>
+    <div class="row">${focusButtons()}<button class="btn ghost" data-act="zen">Modo zen</button></div>
   </section>`;
+}
+
+const isPomo = t => t?.phase !== undefined;
+function phaseLabel() {
+  const t = state.timer;
+  if (!isPomo(t)) return t.target ? 'Tiempo restante' : 'Tiempo en sesión';
+  return { work: `Pomodoro ${t.pomo + 1}. Enfoque`, break: t.target === 15 ? 'Descanso largo. Levántate y respira.' : 'Descanso. Aléjate de la pantalla.', ready: `Descanso terminado. Llevas ${plural(t.pomo, 'pomodoro', 'pomodoros')}.` }[t.phase];
+}
+function focusButtons() {
+  const t = state.timer;
+  if (isPomo(t) && t.phase === 'ready') return `<button class="btn" data-act="focus-next">Siguiente pomodoro</button><button class="btn ghost" data-act="focus-end">Terminar</button>`;
+  if (isPomo(t) && t.phase === 'break') return `<button class="btn ghost" data-act="focus-end">Terminar</button>`;
+  return `<button class="btn" data-act="focus-stop">Terminar</button><button class="btn ghost" data-act="focus-cancel">Descartar</button>`;
 }
 
 function clockText() {
   const t = state.timer, el = Math.floor((Date.now() - Date.parse(t.start)) / 1000);
+  if (t.phase === 'ready') return '00:00';
   if (!t.target) return clock(el);
   const left = t.target * 60 - el;
   return left >= 0 ? clock(left) : `+${clock(left)}`;
 }
 
 let buzzed = false;
-setInterval(() => {
+function tick() {
+  if (!state.timer) return;
+  if (isPomo(state.timer)) {
+    const { timer, sessions } = advancePomodoro(state.timer, Date.now());
+    if (timer.phase !== state.timer.phase || timer.start !== state.timer.start) {
+      state.timer = timer;
+      state.focus.push(...sessions);
+      save(state);
+      navigator.vibrate?.([200, 100, 200]);
+      return render();
+    }
+  }
+  for (const id of ['clock', 'zclock']) { const el = document.getElementById(id); if (el) el.textContent = clockText(); }
+  const ring = document.getElementById('zring');
+  if (ring) ring.style.strokeDashoffset = ringLeft();
   const c = document.getElementById('clock');
-  if (!state.timer || !c) return;
-  c.textContent = clockText();
+  if (!c || isPomo(state.timer)) return;
   const over = state.timer.target && Date.now() - Date.parse(state.timer.start) >= state.timer.target * 60000;
   if (over) {
     document.getElementById('clocklabel').textContent = 'Tiempo cumplido. Termina cuando quieras.';
     c.classList.add('over');
     if (!buzzed) { buzzed = true; navigator.vibrate?.([200, 100, 200]); }
   }
-}, 1000);
+}
+setInterval(tick, 1000);
+
+// ---- Zen: full screen, nothing but the ring and the time. Keeps the screen on while open.
+let zenOpen = false, wakeLock = null;
+const $zen = document.getElementById('zen');
+function ringLeft() {
+  const t = state.timer;
+  if (!t?.target) return 0;
+  return Math.min(1, (Date.now() - Date.parse(t.start)) / (t.target * 60000)).toFixed(4);
+}
+async function keepAwake(on) {
+  try {
+    if (on && !wakeLock) wakeLock = await navigator.wakeLock?.request('screen');
+    if (!on) { await wakeLock?.release(); wakeLock = null; }
+  } catch { wakeLock = null; } // denied or unsupported: the timer still works
+}
+function renderZen() {
+  const show = zenOpen && !!state.timer;
+  $zen.hidden = !show;
+  document.body.classList.toggle('zen-on', show);
+  keepAwake(show);
+  if (!show) return;
+  const t = state.timer, goal = state.goals.find(g => g.id === t.goal);
+  const wasOpen = $zen.contains(document.activeElement);
+  $zen.className = `zen ${t.phase ?? 'work'}`;
+  $zen.innerHTML = `<p class="zen-phase">${phaseLabel()}</p>
+    <div class="zen-ring">
+      <svg viewBox="0 0 260 260" aria-hidden="true"><circle cx="130" cy="130" r="118" class="track"/><circle cx="130" cy="130" r="118" class="fill" id="zring" pathLength="1" style="stroke-dashoffset:${ringLeft()}"/></svg>
+      <span class="zen-clock" id="zclock">${clockText()}</span>
+    </div>
+    ${goal ? `<p class="zen-goal">${esc(goal.title)}</p>` : ''}
+    <div class="row">${focusButtons()}<button class="btn ghost" data-act="zen-exit">Salir</button></div>`;
+  if (!wasOpen) $zen.querySelector('[data-act="zen-exit"]').focus({ preventScroll: true }); // keep keyboard focus inside the overlay
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && zenOpen) { zenOpen = false; renderZen(); } });
+document.addEventListener('visibilitychange', () => { wakeLock = null; if (document.visibilityState === 'visible' && zenOpen) keepAwake(true); });
 
 function openFocusSetup() {
   const goals = activeGoals();
@@ -728,7 +791,7 @@ function openFocusSetup() {
   $sheet.innerHTML = `<form id="focusf">
     <h2>Sesión de enfoque</h2>
     <fieldset><legend>Duración</legend><div class="opts">
-      ${opt(25, '25 minutos', true)}${opt(50, '50 minutos')}${opt(90, '90 minutos')}${opt('', 'Sin límite')}</div></fieldset>
+      ${opt('pomo', 'Pomodoro: 25 minutos y descansos', true)}${opt(25, '25 minutos')}${opt(50, '50 minutos')}${opt(90, '90 minutos')}${opt('', 'Sin límite')}</div></fieldset>
     ${goals.length ? `<fieldset><legend>¿Para qué meta?</legend><div class="opts">
       <label class="opt"><input type="radio" name="goal" value="" checked><span>Ninguna en concreto</span></label>
       ${goals.map(g => `<label class="opt"><input type="radio" name="goal" value="${g.id}"><span>${esc(g.title)}</span></label>`).join('')}</div></fieldset>` : ''}
@@ -737,8 +800,10 @@ function openFocusSetup() {
   $sheet.querySelector('#focusf').onsubmit = e => {
     e.preventDefault();
     const f = new FormData(e.target);
-    state.timer = { start: new Date().toISOString(), target: +f.get('target') || null, goal: f.get('goal') || null };
+    const pomo = f.get('target') === 'pomo';
+    state.timer = { start: new Date().toISOString(), target: pomo ? 25 : +f.get('target') || null, goal: f.get('goal') || null, ...(pomo && { phase: 'work', pomo: 0 }) };
     buzzed = false;
+    zenOpen = pomo;
     save(state);
     $sheet.close();
     render();
@@ -747,11 +812,13 @@ function openFocusSetup() {
 }
 
 function stopFocus(keep) {
+  if (isPomo(state.timer) && state.timer.phase !== 'work') { state.timer = null; zenOpen = false; save(state); return render(); }
   const t = state.timer, mins = Math.round((Date.now() - Date.parse(t.start)) / 60000);
   if (!keep && mins >= 1 && !confirm(`¿Descartar esta sesión de ${dur(mins)}? No se guardará.`)) return;
   if (keep && mins < 1) alert('Las sesiones de menos de un minuto no se guardan.');
   if (keep && mins >= 1) state.focus.push({ start: t.start, mins, goal: t.goal });
   state.timer = null;
+  zenOpen = false;
   save(state);
   render();
 }
@@ -927,6 +994,7 @@ const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : cal
 // `enter` replays the ink-stroke reveal; only on navigation, never on a check-in.
 function render(enter = false) {
   cache = new Map();
+  renderZen();
   $view.classList.toggle('enter', enter && !reduceMotion.matches);
   $view.innerHTML = views[tab]();
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'));
@@ -1073,6 +1141,10 @@ document.addEventListener('click', e => {
     case 'focus-setup': return openFocusSetup();
     case 'focus-stop': return stopFocus(true);
     case 'focus-cancel': return stopFocus(false);
+    case 'focus-end': return stopFocus(true);
+    case 'focus-next': Object.assign(state.timer, { phase: 'work', target: 25, start: new Date().toISOString() }); save(state); return render();
+    case 'zen': zenOpen = true; return renderZen();
+    case 'zen-exit': zenOpen = false; return renderZen();
     case 'sleep-clear': setEntry(d, { bed: null, wake: null, sleep: null }); save(state); $sheet.close(); return render();
     case 'metric': return openMetric(el.dataset.m, d);
     case 'metric-new': return openMetricEditor();
