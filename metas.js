@@ -257,7 +257,7 @@ export function viewListas() {
     <form id="additem" class="additem"><input id="newitem" maxlength="200" placeholder="Añadir a la lista" autocomplete="off" enterkeyhint="done" aria-label="Nuevo elemento">
       <button class="btn">Añadir</button></form>
     ${pending.length ? `<ul class="items">${pending.map(row).join('')}</ul>` : l.items.length ? '<p class="muted">Todo hecho.</p>' : ''}
-    ${done.length ? `<h3 class="sub-sm" data-i="done-h">Hechas (${done.length})</h3><ul class="items">${done.map(row).join('')}</ul>` : ''}
+    ${done.length ? `<h2 class="sub-sm" data-i="done-h">Hechas (${done.length})</h2><ul class="items">${done.map(row).join('')}</ul>` : ''}
     <div class="row list-tools">
       ${l.items.length ? `<button class="link" data-act="list-edit">${listEdit ? 'Listo' : 'Borrar elementos'}</button>` : ''}
       ${done.length ? `<button class="link" data-act="list-clear">Quitar las hechas</button>` : ''}

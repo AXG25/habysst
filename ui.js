@@ -39,14 +39,17 @@ export const ui = (() => { try { return JSON.parse(localStorage.getItem('habysst
 export const setUi = patch => { Object.assign(ui, patch); try { localStorage.setItem('habysst:ui', JSON.stringify(ui)); } catch {} };
 
 export const fold = (id, title, note, actions, body) =>
-  `<details class="fold sec" id="fold-${id}"${ui.closed[id] ? '' : ' open'}>
-    <summary><h2>${title}</h2>${note ? `<span class="hmeta">${note}</span>` : ''}<span class="sec-act">${actions}</span><i class="chev" aria-hidden="true"></i></summary>
-    <div class="fold-body">${body}</div></details>`;
+  `<section class="fold-wrap${actions ? ' has-act' : ''}"><details class="fold sec" id="fold-${id}"${ui.closed[id] ? '' : ' open'}>
+    <summary><h2>${title}</h2>${note ? `<span class="hmeta">${note}</span>` : ''}<i class="chev" aria-hidden="true"></i></summary>
+    <div class="fold-body">${body}</div></details>${actions ? `<div class="sec-act">${actions}</div>` : ''}</section>`;
 
 
-export const fmt = n => n.toLocaleString('es', { maximumFractionDigits: 2 });
+// Formatters are built once: creating one per call made long lists and chart tables slow.
+const numberFmt = new Intl.NumberFormat('es', { maximumFractionDigits: 2 });
+const dayMonthFmt = new Intl.DateTimeFormat('es', { day: 'numeric', month: 'short' });
+export const fmt = n => numberFmt.format(n);
 
-export const fmtDate = k => parseYmd(k).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+export const fmtDate = k => dayMonthFmt.format(parseYmd(k));
 
 
 // A hanko-style stamp for the rare moment a goal is achieved.
@@ -75,7 +78,7 @@ export const dur = mins => (mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)
 // ---- Analysis
 export const fmt1 = n => fmt(Math.round(n * 10) / 10);
 
-export const short = k => parseYmd(k).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+export const short = fmtDate;
 
 // <details> toggle does not bubble, so listen in the capture phase.
 document.addEventListener('toggle', e => {

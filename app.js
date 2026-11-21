@@ -40,7 +40,6 @@ document.addEventListener('click', e => {
     if (e.target === $sheet) $sheet.close(); // tap on backdrop
     return;
   }
-  if (el.tagName === 'BUTTON' && el.closest('summary')) e.preventDefault(); // act without folding the section
   if (el.dataset.tab) {
     const next = el.dataset.tab;
     if (next === tab) return;
