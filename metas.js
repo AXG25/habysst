@@ -85,8 +85,9 @@ export function openGoal(id) {
       <p class="gline"><b>${s.pctLabel}</b> ${s.amount}</p>
       ${s.pace ? `<p class="hmeta">${s.pace}</p>` : ''}
       ${active && g.kind === 'number' ? `<div class="logrow">
-        <label class="field">Valor actual${g.unit ? ` (${esc(g.unit)})` : ''}<input name="v" type="number" step="any" inputmode="decimal" value="${s.value}"></label>
-        <button type="button" class="btn" data-act="goal-log" data-g="${g.id}">Registrar</button></div>` : ''}
+        <label class="field">Valor actual${g.unit ? ` (${esc(g.unit)})` : ''}<input name="v" type="number" step="any" inputmode="decimal" enterkeyhint="done" value="${s.value}"></label>
+        <button type="button" class="btn wide" data-act="goal-log" data-g="${g.id}">Guardar valor</button>
+        <p class="muted small saved" aria-live="polite"></p></div>` : ''}
       ${g.kind === 'steps' ? `<ul class="habits">${g.steps.map((st, i) => `<li><button type="button" class="habit compact panel${st.done ? ' on' : ''}" data-act="goal-step" data-g="${g.id}" data-i="${i}" aria-pressed="${st.done}"${active ? '' : ' disabled'}>
         <span class="check" aria-hidden="true"></span><span class="hname">${esc(st.text)}</span></button></li>`).join('')}</ul>` : ''}
       ${state.focus.some(f => f.goal === g.id) ? `<p class="hmeta">Enfoque dedicado: ${dur(focusIn('0000-00-00', '9999-12-31', g.id))}</p>` : ''}
@@ -104,8 +105,14 @@ export function openGoal(id) {
         : `<button type="button" class="link danger" data-act="goal-delete" data-g="${g.id}">Borrar meta</button>`}
     </form>`;
   };
-  $sheet.redraw = draw;
-  draw();
+  $sheet.redraw = () => {
+    draw();
+    // Typing a value is enough: it saves on the keyboard's Done/Enter or when leaving the field.
+    const input = $sheet.querySelector('input[name="v"]');
+    input?.addEventListener('change', () => logGoal(id));
+    input?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } }); // Enter would close the sheet
+  };
+  $sheet.redraw();
   if (!$sheet.open) $sheet.showModal();
 }
 
@@ -120,6 +127,8 @@ export function logGoal(id) {
   save(state);
   $sheet.redraw();
   $sheet.querySelector('.pbar')?.classList.add('pop');
+  const note = $sheet.querySelector('.logrow .saved');
+  if (note) note.textContent = `Guardado: ${fmt(v)}${g.unit ? ` ${g.unit}` : ''} hoy.`;
   render();
 }
 

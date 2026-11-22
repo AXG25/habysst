@@ -335,7 +335,9 @@ legend { font-weight: 700; padding: 0; margin-bottom: 8px; }
 }
 .pbar b { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--hanko); }
 .gdetail h3 { margin: 20px 0 6px; font-size: 1rem; }
-.logrow { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; margin-top: 8px; }
+.logrow { display: grid; gap: 8px; margin-top: 8px; }
+.logrow .saved { margin: 0; min-height: 1.2em; }
+.logrow input { min-width: 0; }
 .logrow .field { margin: 0; }
 .log { list-style: none; margin: 0; padding: 0; }
 .log li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--rule); }
