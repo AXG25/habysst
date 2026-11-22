@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ymd, runs, periods, streaks, bestIn, covered, weeksOfMonth, monthRow } from '../logic.js';
+import { ymd, runs, periods, streaks, bestIn, covered, constancy, weeksOfMonth, monthRow } from '../logic.js';
 import { fromJSON, toJSON, cleanFreq } from '../store.js';
 
 const d = (m, day) => new Date(2026, m, day, 15);
@@ -254,4 +254,17 @@ test('daily Latin maxims: complete entries, no duplicates, same all day, change 
   assert.equal(new Set(MOTTOS.map(m => m[0].toLowerCase())).size, MOTTOS.length);
   assert.equal(mottoOf(new Date(2026, 10, 22, 0, 5)), mottoOf(new Date(2026, 10, 22, 23, 55)));
   assert.notEqual(mottoOf(new Date(2026, 10, 22)), mottoOf(new Date(2026, 10, 23)));
+});
+
+test('constancy: streak in days ending today or yesterday, rate and days of the year', () => {
+  const now = d(1, 10); // 2026-02-10
+  const a = { freq: DAILY, done: set('2026-02-07', '2026-02-08', '2026-02-09') };      // run ends yesterday: 3
+  const b = { freq: DAILY, done: set('2026-01-01', '2026-01-02', '2026-02-10') };      // run today: 1
+  const c = constancy([a, b], now);
+  assert.equal(c.streak, 3);
+  assert.equal(c.days, 6); // Jan 1, Jan 2, Feb 7, 8, 9, 10
+  assert.equal(constancy([{ freq: DAILY, done: set('2026-02-01') }], d(1, 3)).rate, 50); // Feb 1 met, Feb 2 missed, today pending
+  assert.equal(constancy([{ freq: DAILY, done: set('2026-02-01') }], now).streak, 0);
+  assert.deepEqual(constancy([], now), { streak: 0, rate: null, days: 0 });
+  assert.equal(constancy([{ freq: DAILY, done: set('2025-12-31') }], now).days, 0); // other years don't count
 });

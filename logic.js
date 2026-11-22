@@ -189,3 +189,18 @@ export function advancePomodoro(timer, now) {
   }
   return { timer: t, sessions };
 }
+
+// Numbers for the share image: longest live streak (in days), % of this year's finished periods met, active days this year.
+export function constancy(items, now) {
+  const today = startOfDay(now), year = today.getFullYear(), yearKeys = new Set();
+  let streak = 0, met = 0, total = 0;
+  for (const { freq, done } of items) {
+    const ps = periods(freq, done, now), cov = covered(ps, done, now);
+    let n = 0;
+    for (let d = cov.has(ymd(today)) ? today : addDays(today, -1); cov.has(ymd(d)); d = addDays(d, -1)) n++;
+    streak = Math.max(streak, n);
+    for (const p of ps) if (!p.current && p.start.getFullYear() === year) { total++; if (p.ok) met++; }
+    for (const k of done) if (parseYmd(k).getFullYear() === year && parseYmd(k) <= today) yearKeys.add(k);
+  }
+  return { streak, rate: total ? Math.round((100 * met) / total) : null, days: yearKeys.size };
+}
