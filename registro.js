@@ -135,14 +135,18 @@ export function openJournalSettings() {
     ${PERIODS.map(k => `<label class="field">${cap(PERIOD[k].name)}<textarea id="review-prompts-${k}" rows="4" placeholder="${qsFor(k).filter(q => q !== 'focus').map(q => esc(qLabel(q, k))).join('&#10;')}">${esc((state.reviewPrompts[k] ?? []).join('\n'))}</textarea></label>`).join('')}
     <div class="row"><button class="btn">Guardar</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
   </form>`;
-  $sheet.querySelector('#jsettings').onsubmit = e => {
-    e.preventDefault();
-    state.prompts = lines('prompts');
-    state.reviewPrompts = Object.fromEntries(PERIODS.map(k => [k, lines(`review-prompts-${k}`)]).filter(([, v]) => v.length));
-    save(state);
-    $sheet.close();
+  // Closing the sheet any way (swipe, Escape, Guardar) keeps what was typed; only Cancelar drops it.
+  let keep = true;
+  $sheet.querySelector('[data-act=close]').addEventListener('click', () => { keep = false; });
+  $sheet.querySelector('#jsettings').onsubmit = e => { e.preventDefault(); $sheet.close(); };
+  $sheet.addEventListener('close', () => {
+    if (keep) {
+      state.prompts = lines('prompts');
+      state.reviewPrompts = Object.fromEntries(PERIODS.map(k => [k, lines(`review-prompts-${k}`)]).filter(([, v]) => v.length));
+      save(state);
+    }
     render();
-  };
+  }, { once: true });
   $sheet.showModal();
 }
 

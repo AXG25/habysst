@@ -26,10 +26,12 @@ export const radio = (name, value, label, on = false) =>
   `<label class="opt"><input type="radio" name="${name}" value="${value}"${on ? ' checked' : ''}><span>${label}</span></label>`;
 
 
+const chevron = points => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="${points}"/></svg>`;
+
 export const header = (title, sub, nav = '', brand = false, tool = '') =>
-  `<header class="hero">${nav ? `<button class="nav" data-act="prev" aria-label="Anterior">‹</button>` : ''}
-    <div><h1${brand ? ` class="fit" style="--len:${title.length}"` : ''}>${title}</h1><p>${sub}</p></div>
-    ${nav ? `<button class="nav" data-act="next" aria-label="Siguiente">›</button>` : ''}
+  `<header class="hero">${nav ? `<button class="nav" data-act="prev" aria-label="Anterior">${chevron('15 18 9 12 15 6')}</button>` : ''}
+    <div><h1${brand || nav ? ` class="fit" style="--len:${title.length}"` : ''}>${title}</h1><p>${sub}</p></div>
+    ${nav ? `<button class="nav" data-act="next" aria-label="Siguiente">${chevron('9 18 15 12 9 6')}</button>` : ''}
     ${brand ? `<span class="brand" aria-label="HabyssT">HabyssT</span>` : ''}${tool}</header>`;
 
 // A settings button for a header: the gear opens that tab's options.

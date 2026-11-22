@@ -93,6 +93,14 @@ const check = (name, cond) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`)
   await p4.reload(); await p4.waitForTimeout(300);
   check('a running session shows one clock, even with no habits', (await p4.$$('.focusbox')).length === 1);
 
+  await p4.click('[data-tab=diario]'); await p4.waitForTimeout(300);
+  await p4.click('[data-act=journal-settings]'); await p4.waitForTimeout(300);
+  await p4.fill('#review-prompts-week', '¿Qué evité?'); await p4.keyboard.press('Escape'); await p4.waitForTimeout(300);
+  check('question settings closed without Guardar are kept', JSON.parse(await p4.evaluate(() => localStorage.getItem('habysst'))).reviewPrompts.week?.[0] === '¿Qué evité?');
+  await p4.click('[data-act=journal-settings]'); await p4.waitForTimeout(300);
+  await p4.fill('#review-prompts-week', 'Borrado'); await p4.click('#jsettings [data-act=close]'); await p4.waitForTimeout(300);
+  check('Cancelar leaves the questions as they were', JSON.parse(await p4.evaluate(() => localStorage.getItem('habysst'))).reviewPrompts.week?.[0] === '¿Qué evité?');
+
   check('no script errors', errors.length === 0 || (console.log(errors), false));
   await browser.close(); server.close();
   console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
