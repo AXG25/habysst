@@ -1,7 +1,7 @@
-import { ymd, addDays, parseYmd } from './logic.js';
+import { ymd, parseYmd } from './logic.js';
 import { save, snapshot, cleanFreq, TONES } from './store.js';
 import { $sheet, DAYS, MONTHS, TONE_NAMES, WD, cap, esc, fold, header, radio, setUi, stamp, ui } from './ui.js';
-import { bars, dueOn, freqLabel, info, resetCache, setOf, state, unit, weekCount } from './core.js';
+import { dueOn, freqLabel, info, resetCache, setOf, state, unit, weekCount } from './core.js';
 import { glide } from './motion.js';
 import { checkIn, metricRows, scales, sleepLine } from './registro.js';
 import { reviewNotice } from './revisiones.js';
@@ -32,7 +32,6 @@ export function viewHoy() {
   const top = head + reviewNotice(now) + (state.timer ? focusBox(key) : '');
   if (!state.habits.length) return top + fold('habits', 'Hábitos', '', secActions('habits'), emptyState) + checkIn(key) + metricsSec + focusBox(key);
 
-  const strip = Array.from({ length: 14 }, (_, i) => addDays(now, i - 13));
   const pendingFirst = list => [...list.filter(h => !setOf(h).has(key)), ...list.filter(h => setOf(h).has(key))];
   const due = pendingFirst(state.habits.filter(h => dueOn(h, now)));
   const rest = pendingFirst(state.habits.filter(h => !dueOn(h, now)));
@@ -47,7 +46,7 @@ export function viewHoy() {
       <span class="check" aria-hidden="true"></span>
       <span class="hname">${esc(h.name)}</span>
       <span class="hmeta">${week}Racha ${unit(h, cur)}. Mejor: ${best}</span>
-      <span class="strip" aria-hidden="true">${bars(strip, h, 1)}</span>
+      <i class="sw dot t${h.tone}" aria-hidden="true"></i>
     </button></li>`;
   };
   const daysSince = state.lastBackup ? Math.floor((now - new Date(state.lastBackup)) / 864e5) : null;
