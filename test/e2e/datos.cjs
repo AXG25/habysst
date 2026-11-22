@@ -101,6 +101,23 @@ const check = (name, cond) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`)
   await p4.fill('#review-prompts-week', 'Borrado'); await p4.click('#jsettings [data-act=close]'); await p4.waitForTimeout(300);
   check('Cancelar leaves the questions as they were', JSON.parse(await p4.evaluate(() => localStorage.getItem('habysst'))).reviewPrompts.week?.[0] === '¿Qué evité?');
 
+  // Starter data, as on a first open, with the tutorial already seen.
+  const p5 = await ctx.newPage(); await p5.goto(url); await p5.waitForTimeout(300);
+  await p5.evaluate(async () => {
+    const [{ starter }, { save }] = await Promise.all([import('./seed.js'), import('./store.js')]);
+    save(starter(new Date())); localStorage.setItem('habysst:ui', JSON.stringify({ tutorialDone: true }));
+  });
+  await p5.reload(); await p5.waitForTimeout(300);
+  const poster = await p5.evaluate(async () => {
+    const { drawPoster } = await import('./share.js');
+    const c = document.createElement('canvas');
+    await drawPoster(c, { names: false, year: new Date().getFullYear() }); const off = c.toDataURL();
+    await drawPoster(c, { names: true, year: new Date().getFullYear() });
+    return { w: c.width, h: c.height, differs: off !== c.toDataURL(), inked: c.getContext('2d').getImageData(0, 0, 1080, 1920).data.some((v, i) => i % 4 === 0 && v < 128) };
+  }).catch(e => (console.log(e.message), {}));
+  check('the share image is 1080×1920 and drawn', poster.w === 1080 && poster.h === 1920 && poster.inked);
+  check('the names switch changes the image', poster.differs);
+
   check('no script errors', errors.length === 0 || (console.log(errors), false));
   await browser.close(); server.close();
   console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
