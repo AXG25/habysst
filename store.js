@@ -191,7 +191,7 @@ export function save(s) {
 }
 
 // ---- Second copy and automatic snapshots, in IndexedDB
-const STORE = 'kv', KEEP = 30;
+const STORE = 'kv', KEEP = 15;
 let dbp = null;
 const db = () => (dbp ??= new Promise((res, rej) => {
   const r = indexedDB.open(KEY, 1);
@@ -243,6 +243,11 @@ export async function listSnapshots() {
     const keys = (await idbKeys()).filter(k => k.startsWith('snap:')).sort().reverse();
     return Promise.all(keys.map(async k => { const v = await idbGet(k); return { key: k, at: v.at, reason: v.reason, summary: summarize(JSON.parse(v.json)) }; }));
   } catch (e) { warn(e); return []; }
+}
+
+export const deleteSnapshot = key => idbDel(key).catch(warn);
+export async function clearSnapshots() {
+  try { for (const k of (await idbKeys()).filter(k => k.startsWith('snap:'))) await idbDel(k); } catch (e) { warn(e); }
 }
 
 export async function readSnapshot(key) {

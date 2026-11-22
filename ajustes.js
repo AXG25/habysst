@@ -1,7 +1,7 @@
 import { removeFiller } from './seed.js';
 import { startTutorial } from './tutorial.js';
 import { ymd } from './logic.js';
-import { save, fromJSON, toJSON, snapshot, listSnapshots, readSnapshot } from './store.js';
+import { save, fromJSON, toJSON, snapshot, listSnapshots, readSnapshot, deleteSnapshot, clearSnapshots } from './store.js';
 import { $sheet, esc, header, plural, setUi, stamp, ui } from './ui.js';
 import { freqLabel, setState, state } from './core.js';
 import { themeReveal } from './motion.js';
@@ -123,8 +123,14 @@ export async function fillDataStatus() {
     <p class="muted small">Tus datos ocupan ${kb < 1 ? 'menos de 1' : kb} KB de unos 5.000 KB disponibles.</p>
     <h3>Copias automáticas en este teléfono</h3>
     <p class="muted small">Se guarda una al día y otra antes de importar, borrar o restaurar. Te protegen de errores, no de perder el teléfono.</p>
-    ${snaps.length ? `<ul class="log snaps">${snaps.map(x => `<li><span>${when(x.at)}<small>${esc(x.reason)}. ${plural(x.summary.habits, 'hábito', 'hábitos')}, ${x.summary.checks} registros, ${plural(x.summary.entries, 'día', 'días')} de diario.</small></span>
-      <button class="link" data-act="restore" data-k="${x.key}" data-at="${x.at}">Restaurar</button></li>`).join('')}</ul>` : '<p class="muted small">Todavía no hay copias. La primera se crea hoy en cuanto registres algo.</p>'}`;
+    ${snaps.length ? `<details class="closed snapbox"${ui.snapsOpen ? ' open' : ''}><summary>Ver copias (${snaps.length}). Última: ${when(snaps[0].at)}</summary>
+      <ul class="log snaps">${snaps.map(x => `<li><span>${when(x.at)}<small>${esc(x.reason)}. ${plural(x.summary.habits, 'hábito', 'hábitos')}, ${x.summary.checks} registros, ${plural(x.summary.entries, 'día', 'días')} de diario.</small></span>
+        <span class="snap-act"><button class="link" data-act="restore" data-k="${x.key}" data-at="${x.at}">Restaurar</button>
+        <button class="link danger" data-act="snap-delete" data-k="${x.key}" aria-label="Borrar la copia del ${when(x.at)}">Borrar</button></span></li>`).join('')}</ul>
+      <button class="link danger" data-act="snap-clear">Borrar todas las copias</button></details>`
+      : '<p class="muted small">Ahora no hay copias. Se crea una cada día que uses la app, y otra antes de importar, borrar o restaurar.</p>'}
+    <p class="muted small">Se guardan como máximo 15; las más antiguas se borran solas.</p>`;
+  box.querySelector('.snapbox')?.addEventListener('toggle', e => setUi({ snapsOpen: e.target.open }));
 }
 
 
@@ -162,6 +168,15 @@ export const actions = {
     save(state);
     render();
     stamp('Borrado');
+  },
+  'snap-delete': async el => {
+    await deleteSnapshot(el.dataset.k);
+    fillDataStatus();
+  },
+  'snap-clear': async () => {
+    if (!confirm('¿Borrar todas las copias automáticas? Tus datos actuales no se tocan, pero ya no podrás volver a un momento anterior hasta que se cree una copia nueva.')) return;
+    await clearSnapshots();
+    fillDataStatus();
   },
   'restore': (el, e) => { 
     return restoreSnapshot(el.dataset.k, el.dataset.at);

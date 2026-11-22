@@ -770,3 +770,7 @@ dialog form { padding-top: 16px; }
 .filler { margin-top: 20px; padding: 16px; }
 .filler h2 { margin: 0 0 8px; font: 400 1.2rem/1.2 var(--display); }
 .filler p { margin: 0 0 12px; }
+.snap-act { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.snap-act .link { padding: 6px 0; }
+.snapbox > .danger { margin-top: 10px; }
+.snap-act .danger { margin-top: 0; }
