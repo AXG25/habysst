@@ -29,6 +29,8 @@ body {
 button, input, label.btn { font: inherit; color: inherit; }
 button { background: none; border: 0; padding: 0; cursor: pointer; }
 :focus-visible { outline: 3px solid var(--hanko); outline-offset: 2px; }
+/* Titles get focus only so screen readers announce a sheet; they are not controls, so no ring. */
+[tabindex="-1"]:focus { outline: none; }
 
 main {
   max-width: 560px;
@@ -212,6 +214,7 @@ main {
 .manage span { flex: 1; font-weight: 700; }
 .backup { margin-top: 28px; padding: 16px; }
 .backup h2, dialog h2 { margin: 0 0 8px; font: 400 1.4rem/1.2 var(--display); }
+dialog h2 { margin-bottom: 16px; }
 .backup p { margin: 0 0 10px; }
 .muted { color: var(--muted); }
 .row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
