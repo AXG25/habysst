@@ -3,7 +3,8 @@
 import { addDays, constancy, monthRow, runs, ymd } from './logic.js';
 import { info, setOf, state } from './core.js';
 import { mottoOf } from './mottos.js';
-import { MONTHS, cap } from './ui.js';
+import { $sheet, MONTHS, cap } from './ui.js';
+import { cursor } from './progreso.js';
 
 export const W = 1080, H = 1920;
 const M = 72, INK = '#000000', PAPER = '#ffffff', HANKO = '#d42a1f', RULE = '#d6d6d6', MUTED = '#6b6b6b';
@@ -210,3 +211,48 @@ function footer(ctx) {
   ctx.font = `500 28px ${BODY}`; ctx.fillStyle = MUTED; ctx.textAlign = 'center';
   ctx.fillText('axg25.github.io/habysst', W / 2, 1860);
 }
+
+// The sheet: a preview of the poster, the names switch, and Compartir.
+// The file is made after each draw, so Compartir can call navigator.share straight from the tap (iOS needs that).
+let ready;
+function preview(names, year) {
+  const canvas = $sheet.querySelector('.poster');
+  ready = drawPoster(canvas, { names, year })
+    .then(() => new Promise(r => canvas.toBlob(r, 'image/png')))
+    .then(blob => new File([blob], `habysst-${year}.png`, { type: 'image/png' }));
+}
+
+function download(file) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = file.name;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href));
+}
+
+export const actions = {
+  'share-open': () => {
+    const year = cursor.getFullYear();
+    $sheet.redraw = null;
+    $sheet.innerHTML = `<form id="sharef" class="entry">
+      <h2 tabindex="-1" autofocus>Compartir tu constancia</h2>
+      <canvas class="poster panel" width="${W}" height="${H}" role="img" aria-label="Imagen de tu constancia en ${year}: tus rachas del año, día a día"></canvas>
+      <label class="opt"><input type="checkbox" name="names">Mostrar nombres de los hábitos</label>
+      <div class="row"><button type="button" class="btn" data-act="share-go">Compartir</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
+    </form>`;
+    const form = $sheet.querySelector('#sharef');
+    form.onsubmit = e => e.preventDefault();
+    form.names.onchange = () => preview(form.names.checked, year);
+    preview(false, year);
+    $sheet.showModal();
+  },
+  'share-go': async () => {
+    const file = await ready;
+    try {
+      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: 'HabyssT' });
+      else download(file);
+    } catch (e) {
+      if (e.name === 'AbortError') return; // closed the share menu: stay on the sheet
+      download(file);
+    }
+    $sheet.close();
+  },
+};

@@ -129,6 +129,13 @@ const check = (name, cond) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`)
   });
   check('the share image still draws when a font fails to load', fallback);
 
+  await p5.click('[data-tab=rachas]'); await p5.click('[data-act=share-open]');
+  const [dl] = await Promise.all([p5.waitForEvent('download'), p5.click('[data-act=share-go]')]);
+  check('sharing on a computer downloads the PNG', /^habysst-\d{4}\.png$/.test(dl.suggestedFilename()));
+  // p4 has no habits
+  await p4.click('[data-tab=rachas]');
+  check('no share button without habits', !(await p4.$('[data-act=share-open]')));
+
   check('no script errors', errors.length === 0 || (console.log(errors), false));
   await browser.close(); server.close();
   console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

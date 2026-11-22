@@ -19,6 +19,7 @@ import { actions as revisionesActions } from './revisiones.js';
 import { actions as metasActions } from './metas.js';
 import { actions as enfoqueActions } from './enfoque.js';
 import { actions as ajustesActions } from './ajustes.js';
+import { actions as shareActions } from './share.js';
 
 const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : calMode === 'ano' ? viewAno() : viewAnalisis()), diario: viewDiario, metas: viewMetas, habitos: viewHabitos };
 
@@ -35,7 +36,7 @@ export function render(enter = false) {
 
 
 // Every tappable element names its action in data-act; each module handles its own.
-const actions = { ...uiActions, ...hoyActions, ...progresoActions, ...registroActions, ...revisionesActions, ...metasActions, ...enfoqueActions, ...ajustesActions };
+const actions = { ...uiActions, ...hoyActions, ...progresoActions, ...registroActions, ...revisionesActions, ...metasActions, ...enfoqueActions, ...ajustesActions, ...shareActions };
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act], [data-tab]');
   if (!el) {

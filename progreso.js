@@ -1,5 +1,5 @@
 import { ymd, addDays, parseYmd, weeksOfMonth, monthRow, sleepMins, mean, compareDays } from './logic.js';
-import { MONTHS, WD, cap, dur, esc, fmt1, header, longDate, plural, reduceMotion, short } from './ui.js';
+import { MONTHS, WD, cap, dur, esc, fmt1, header, longDate, plural, reduceMotion, shareTool, short } from './ui.js';
 import { bars, dueOn, entryOf, focusIn, focusOn, info, lastDays, legendItem, rate, setOf, setTab, state, valOf } from './core.js';
 import { go } from './motion.js';
 import { emptyState } from './hoy.js';
@@ -22,7 +22,7 @@ export const calSwitch = () => `<div class="seg" role="group" aria-label="Vista"
 
 export function viewMes() {
   const y = cursor.getFullYear(), m = cursor.getMonth(), t = ymd(new Date()), hs = state.habits;
-  const head = header(cap(MONTHS[m]), String(y), true) + calSwitch();
+  const head = header(cap(MONTHS[m]), String(y), true, false, hs.length ? shareTool : '') + calSwitch();
   if (!hs.length) return head + emptyState;
   const weeks = weeksOfMonth(y, m);
   const monthDays = weeks.flat().filter(Boolean);
@@ -45,7 +45,7 @@ export function viewMes() {
 
 export function viewAno() {
   const y = cursor.getFullYear(), t = ymd(new Date());
-  const head = header(String(y), 'Rachas del año', true) + calSwitch();
+  const head = header(String(y), 'Rachas del año', true, false, state.habits.length ? shareTool : '') + calSwitch();
   if (!state.habits.length) return head + emptyState;
   if (yearFilter !== 'all' && !state.habits.some(h => h.id === yearFilter)) yearFilter = 'all';
   const hs = yearFilter === 'all' ? state.habits : state.habits.filter(h => h.id === yearFilter);
