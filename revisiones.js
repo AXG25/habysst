@@ -136,9 +136,15 @@ export function reviewNotice(now) {
 
 export function reviewList() {
   const ps = Object.keys(state.reviews).map(periodOf).sort((a, b) => b.to.localeCompare(a.to) || a.kind.localeCompare(b.kind));
-  return ps.length ? `<details class="closed"><summary>Revisiones anteriores (${ps.length})</summary><ul class="manage">${ps.map(p => `<li class="panel">
-    <span>${periodLabel(p)}<small>${state.reviews[p.key].doneAt ? 'Terminada' : 'Sin terminar'}</small></span>
-    <button class="link" data-act="review" data-d="${p.key}">Abrir</button></li>`).join('')}</ul></details>` : '';
+  // Read mode, like the journal: every answered question in place; tap the card to edit.
+  return ps.length ? `<details class="closed"><summary>Revisiones anteriores (${ps.length})</summary><ul class="entries">${ps.map(p => {
+    const r = state.reviews[p.key], qa = Object.entries(r.answers).filter(([, a]) => a);
+    return `<li><button class="entry-card panel" data-act="review" data-d="${p.key}">
+      <span class="ename">${periodLabel(p)}</span>
+      <span class="hmeta">${r.doneAt ? 'Terminada' : 'Sin terminar'}</span>
+      ${qa.map(([q, a]) => `<span class="qa"><b>${REVIEW_QS.includes(q) ? qLabel(q, p.kind) : esc(q)}</b>${esc(a.length > 400 ? `${a.slice(0, 400)}…` : a)}</span>`).join('')}
+    </button></li>`;
+  }).join('')}</ul></details>` : '';
 }
 
 
