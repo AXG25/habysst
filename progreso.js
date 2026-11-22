@@ -1,5 +1,5 @@
 import { ymd, addDays, parseYmd, weeksOfMonth, monthRow, sleepMins, mean, compareDays } from './logic.js';
-import { MONTHS, WD, cap, dur, esc, fmt1, header, longDate, plural, short } from './ui.js';
+import { MONTHS, WD, cap, dur, esc, fmt1, header, longDate, plural, reduceMotion, short } from './ui.js';
 import { bars, dueOn, entryOf, focusIn, focusOn, info, lastDays, legendItem, rate, setOf, setTab, state, valOf } from './core.js';
 import { go } from './motion.js';
 import { emptyState } from './hoy.js';
@@ -256,8 +256,15 @@ export const actions = {
   'month': (el, e) => { 
     cursor = new Date(cursor.getFullYear(), +el.dataset.m, 1); setTab('rachas'); calMode = 'mes'; return render(true);
   },
-  'yf': (el, e) => { const { h, d } = el.dataset;
-    yearFilter = h; return render();
+  'yf': el => {
+    // Keep the chip row where it was, then bring the chosen chip fully into view.
+    const left = document.querySelector('.chips')?.scrollLeft ?? 0;
+    yearFilter = el.dataset.h;
+    render();
+    const row = document.querySelector('.chips');
+    if (!row) return;
+    row.scrollLeft = left;
+    row.querySelector('[aria-pressed="true"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: reduceMotion.matches ? 'auto' : 'smooth' });
   },
   'cal': (el, e) => { 
     const order = ['mes', 'ano', 'analisis'], m = el.dataset.m; return go(() => { calMode = m; render(true); }, order.indexOf(m) > order.indexOf(calMode) ? 'fwd' : 'back');
