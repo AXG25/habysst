@@ -57,6 +57,7 @@ const check = (name, cond) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`)
   await p.click('[data-tab=habitos]'); await p.waitForTimeout(400);
   await p.click('[data-act=edit][data-h=h1]'); await p.waitForTimeout(400);
   await p.click('[data-act=delete]'); await p.waitForTimeout(1200);
+  await p.click('.snapbox summary'); await p.waitForTimeout(200); // the copy list is folded
   const restore = await p.$('.snaps li:has-text("Antes de borrar el hábito") [data-act=restore]');
   check('deleting takes a snapshot first', !!restore);
   await restore.click(); await p.waitForTimeout(900);
