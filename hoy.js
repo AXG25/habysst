@@ -41,11 +41,11 @@ export function viewHoy() {
       <i class="sw t${h.tone}"></i><span class="hname">${esc(h.name)}</span><span class="hmeta">${freqLabel(h.freq)}</span><span class="link">Editar</span></button></li>`;
     const on = setOf(h).has(key);
     const { cur, best } = info(h);
-    const week = h.freq.type === 'weekly' ? `${weekCount(h, now)} de ${h.freq.times} esta semana. ` : '';
+    const weekly = h.freq.type === 'weekly';
     return `<li style="--r:${i}"><button class="habit panel${on ? ' on' : ''}" data-act="toggle" data-h="${h.id}" data-d="${key}" aria-pressed="${on}">
       <span class="check" aria-hidden="true"></span>
       <span class="hname">${esc(h.name)}</span>
-      <span class="hmeta">${week}Racha ${unit(h, cur)}. Mejor: ${best}</span>
+      <span class="hmeta">${weekly ? `Semana ${weekCount(h, now)}/${h.freq.times}. Racha ${cur} sem., mejor ${best}` : `Racha ${unit(h, cur)}, mejor ${best}`}</span>
       <i class="sw dot t${h.tone}" aria-hidden="true"></i>
     </button></li>`;
   };

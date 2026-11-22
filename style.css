@@ -144,21 +144,24 @@ main {
 .cal { padding: 6px 4px 8px; }
 .wd, .wk { display: grid; grid-template-columns: repeat(7, 1fr); }
 .wd span { text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--muted); padding-bottom: 4px; }
-.wk {
-  grid-template-rows: 30px repeat(var(--n), 9px) 8px;
-  row-gap: 3px;
-  border-top: 1px solid var(--rule);
-}
-.day { grid-row: 1 / -1; display: flex; justify-content: center; align-items: flex-start; padding-top: 4px; }
-.day span {
+.wk { border-top: 1px solid var(--rule); }
+.day { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0 7px; }
+/* One dot per habit done that day; each habit keeps its slot so it can be followed down the weeks. */
+.dots { display: grid; grid-template-columns: repeat(3, 9px); gap: 3px; }
+.dots i { width: 9px; height: 9px; }
+.dots .dot { border-radius: 50%; border-width: 1px; }
+.cal + .legend .sw { width: 16px; height: 16px; border-radius: 50%; }
+@keyframes dot-in { from { opacity: 0; transform: scale(0.4); } }
+.enter .cal .dot { animation: dot-in 260ms var(--ease-out) both; animation-delay: calc(var(--r, 0) * 40ms); }
+.day > span:first-child {
   width: 24px; height: 24px;
   display: grid; place-items: center;
   font-size: 0.8rem; font-weight: 700;
   border-radius: 50%;
 }
 .day:disabled { color: var(--rule); cursor: default; }
-.day.today span { background: var(--hanko); color: var(--paper); }
-.day:not(:disabled):active span { outline: 2px solid var(--ink); }
+.day.today > span:first-child { background: var(--hanko); color: var(--paper); }
+.day:not(:disabled):active > span:first-child { outline: 2px solid var(--ink); }
 
 /* Year grid: 12 month rows × 31 day columns */
 .year { padding: 8px 8px 10px; display: grid; gap: 5px; }
@@ -433,8 +436,8 @@ dialog[open]::backdrop { background: rgb(0 0 0 / 0.45); }
 .lv4 { background-image: repeating-linear-gradient(45deg, var(--ink) 0 1.2px, transparent 1.2px 3.5px), repeating-linear-gradient(-45deg, var(--ink) 0 1.2px, transparent 1.2px 3.5px); }
 .lv5 { background: var(--ink); }
 
-.day.has-entry span { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
-.day.today.has-entry span { text-decoration-color: var(--paper); }
+.day.has-entry > span:first-child { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.day.today.has-entry > span:first-child { text-decoration-color: var(--paper); }
 
 .search { margin: 18px 0 12px; }
 .search input { font-weight: 400; }

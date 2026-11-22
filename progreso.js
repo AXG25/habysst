@@ -29,13 +29,14 @@ export function viewMes() {
 
   return head + `<div class="cal panel">
     <div class="wd">${WD.map(d => `<span>${d}</span>`).join('')}</div>
-    ${weeks.map((w, r) => `<div class="wk" style="--n:${hs.length};--r:${r}">
+    ${weeks.map((w, r) => `<div class="wk" style="--r:${r}">
       ${w.map((d, i) => {
         if (!d) return `<span class="day pad" style="grid-column:${i + 1}"></span>`;
         const k = ymd(d);
-        return `<button class="day${k === t ? ' today' : ''}${state.journal[k] ? ' has-entry' : ''}" style="grid-column:${i + 1}" data-act="day" data-d="${k}"${k > t ? ' disabled' : ''} aria-label="${d.getDate()} de ${MONTHS[m]}"><span>${d.getDate()}</span></button>`;
+        const did = hs.filter(h => setOf(h).has(k));
+        return `<button class="day${k === t ? ' today' : ''}${state.journal[k] ? ' has-entry' : ''}" style="grid-column:${i + 1}" data-act="day" data-d="${k}"${k > t ? ' disabled' : ''} aria-label="${d.getDate()} de ${MONTHS[m]}: ${did.length} de ${hs.length} hábitos"><span>${d.getDate()}</span>
+          <span class="dots" aria-hidden="true">${hs.map(h => (did.includes(h) ? `<i class="sw dot t${h.tone}"></i>` : '<i></i>')).join('')}</span></button>`;
       }).join('')}
-      ${hs.map((h, j) => bars(w, h, j + 2)).join('')}
     </div>`).join('')}
   </div>
   <ul class="legend">${hs.map(h => legendItem(h, monthDays.filter(d => setOf(h).has(ymd(d))).length, ymd(monthDays[0]), ymd(monthDays.at(-1)), 'del mes')).join('')}</ul>`;
