@@ -1,6 +1,6 @@
 // Cache first, then refresh in the background: the app opens instantly even on a weak signal.
 // Other files: a new version is fetched in the background and used from the next open.
-const CACHE = 'habysst-v8'; // bump to drop old cached files (v3 had font stylesheets mixed up)
+const CACHE = 'habysst-v9'; // bump to drop old cached files (v3 had font stylesheets mixed up)
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(
   caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())

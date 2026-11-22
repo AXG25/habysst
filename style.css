@@ -61,6 +61,8 @@ main {
   border-radius: 50%;
 }
 .nav:active { background: var(--ink); color: var(--paper); }
+.gear { display: grid; place-items: center; flex: none; align-self: flex-start; margin-top: 4px; border-width: 2px; transition: transform 300ms var(--ease-out); }
+.gear:active { transform: rotate(60deg); }
 
 .note {
   display: block; width: 100%;

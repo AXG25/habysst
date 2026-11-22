@@ -1,6 +1,6 @@
 import { ymd, reviewPeriod, sleepMins } from './logic.js';
 import { save, snapshot, cleanEntry, PERIODS } from './store.js';
-import { $sheet, KINDS, LEVELS, cap, dur, esc, fmt, fold, header, longDate, plural } from './ui.js';
+import { $sheet, KINDS, LEVELS, cap, dur, esc, fmt, fold, gear, header, longDate, plural } from './ui.js';
 import { entryOf, state, unit, valOf } from './core.js';
 import { PERIOD, qLabel, qsFor, reviewList } from './revisiones.js';
 import { u } from './metas.js';
@@ -110,28 +110,40 @@ export function entryCards(q) {
 
 export function viewDiario() {
   const n = Object.keys(state.journal).length;
-  return header('Diario', plural(n, 'entrada', 'entradas')) + `
+  return header('Diario', plural(n, 'entrada', 'entradas'), '', false, gear('journal-settings', 'Preguntas del diario y de las revisiones')) + `
     <div class="row stack"><button class="btn" data-act="entry" data-d="${ymd(new Date())}">${entryOf(ymd(new Date())) ? 'Seguir con la entrada de hoy' : 'Escribir la entrada de hoy'}</button>
     </div>
     <h2 class="sub">Revisar</h2>
     <div class="seg review-seg" role="group" aria-label="Revisar">${['week', 'month', 'quarter', 'year'].map(k => `<button data-act="review" data-d="${reviewPeriod(k, new Date()).key}">${cap(PERIOD[k].name)}</button>`).join('')}</div>
     ${reviewList()}
     <label class="field search">Buscar en el diario<input type="search" id="jsearch" placeholder="Palabra o frase" autocomplete="off"></label>
-    <div id="entries">${entryCards('')}</div>
-    <details class="closed"><summary>Preguntas guía</summary>
-      <label class="field">Una por línea. Déjalo vacío si prefieres escribir libre.<textarea id="prompts" rows="4">${esc(state.prompts.join('\n'))}</textarea></label>
-      <button class="btn" data-act="prompts">Guardar preguntas</button></details>
-    <details class="closed"><summary>Preguntas de las revisiones</summary>
-      <p class="muted small">Una por línea, distintas para cada periodo. La pregunta por tu prioridad se hace siempre, porque es la que aparece en Hoy. Deja un cuadro vacío para usar las preguntas originales de ese periodo, que ves en gris.</p>
-      ${PERIODS.map(k => `<label class="field">${cap(PERIOD[k].name)}<textarea id="review-prompts-${k}" rows="4" placeholder="${qsFor(k).filter(q => q !== 'focus').map(q => esc(qLabel(q, k))).join('&#10;')}">${esc((state.reviewPrompts[k] ?? []).join('\n'))}</textarea></label>`).join('')}
-      <button class="btn" data-act="review-prompts">Guardar preguntas</button></details>`;
+    <div id="entries">${entryCards('')}</div>`;
 }
 
 
-export function savePrompts() {
-  state.prompts = document.getElementById('prompts').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 8);
-  save(state);
-  render();
+// The gear in Diario: guide questions for entries and the questions of each review, in one sheet.
+export function openJournalSettings() {
+  const lines = id => document.getElementById(id).value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 8);
+  $sheet.redraw = null;
+  $sheet.innerHTML = `<form id="jsettings" class="entry">
+    <h2 tabindex="-1" autofocus>Preguntas</h2>
+    <h3>Preguntas guía</h3>
+    <p class="muted small">Se muestran al escribir en el diario. Una por línea. Déjalo vacío si prefieres escribir libre.</p>
+    <label class="field">Diario<textarea id="prompts" rows="4">${esc(state.prompts.join('\n'))}</textarea></label>
+    <h3>Preguntas de las revisiones</h3>
+    <p class="muted small">Una por línea, distintas para cada periodo. La pregunta por tu prioridad se hace siempre, porque es la que aparece en Hoy. Deja un cuadro vacío para usar las preguntas originales de ese periodo, que ves en gris.</p>
+    ${PERIODS.map(k => `<label class="field">${cap(PERIOD[k].name)}<textarea id="review-prompts-${k}" rows="4" placeholder="${qsFor(k).filter(q => q !== 'focus').map(q => esc(qLabel(q, k))).join('&#10;')}">${esc((state.reviewPrompts[k] ?? []).join('\n'))}</textarea></label>`).join('')}
+    <div class="row"><button class="btn">Guardar</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
+  </form>`;
+  $sheet.querySelector('#jsettings').onsubmit = e => {
+    e.preventDefault();
+    state.prompts = lines('prompts');
+    state.reviewPrompts = Object.fromEntries(PERIODS.map(k => [k, lines(`review-prompts-${k}`)]).filter(([, v]) => v.length));
+    save(state);
+    $sheet.close();
+    render();
+  };
+  $sheet.showModal();
 }
 
 
@@ -279,14 +291,7 @@ export const actions = {
   'rate': (el, e) => { const { h, d } = el.dataset;
     return rate5(el.dataset.k, d, +el.dataset.v);
   },
-  'review-prompts': () => {
-    state.reviewPrompts = Object.fromEntries(PERIODS.map(k => [k, document.getElementById(`review-prompts-${k}`).value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 8)]).filter(([, v]) => v.length));
-    save(state);
-    render();
-  },
-  'prompts': (el, e) => { 
-    return savePrompts();
-  },
+  'journal-settings': () => openJournalSettings(),
   'sleep': (el, e) => { const { h, d } = el.dataset;
     return openSleep(d);
   },
