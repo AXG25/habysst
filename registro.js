@@ -73,6 +73,7 @@ export function openEntry(key) {
       <label class="field">Notas<textarea name="text" rows="6" maxlength="20000" placeholder="Escribe lo que quieras.">${esc(e.text ?? '')}</textarea></label>
       <p class="muted saved" aria-live="polite">Se guarda mientras escribes.</p>
       <div class="row"><button class="btn">Listo</button></div>
+      ${state.journal[key] ? `<button type="button" class="link danger" data-act="entry-delete" data-d="${key}">Borrar esta entrada</button>` : ''}
     </form>`;
     autosave($sheet.querySelector('#entry'), f =>
       setEntry(key, { text: f.get('text'), answers: Object.fromEntries(qs.map((q, i) => [q, f.get(`q${i}`)])) }));
@@ -261,6 +262,13 @@ document.addEventListener('visibilitychange', () => document.visibilityState ===
 
 
 export const actions = {
+  'entry-delete': async el => {
+    const k = el.dataset.d;
+    if (!confirm(`¿Borrar la entrada del ${longDate(k).toLowerCase()}? Se borran el texto, el ánimo, la energía y el sueño de ese día. Antes se guarda una copia automática.`)) return;
+    await snapshot(state, `Antes de borrar la entrada del ${longDate(k).toLowerCase()}`);
+    $sheet.addEventListener('close', () => { delete state.journal[k]; save(state); render(); }, { once: true });
+    $sheet.close();
+  },
   'entry': (el, e) => { const { h, d } = el.dataset;
     return openEntry(d);
   },

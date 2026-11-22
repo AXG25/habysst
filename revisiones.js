@@ -1,5 +1,6 @@
 import { ymd, addDays, parseYmd, weekStats, keyFor, periodOf, reviewPeriod, mean } from './logic.js';
-import { save, cleanReview, REVIEW_QS } from './store.js';
+import { save, snapshot, cleanReview, REVIEW_QS } from './store.js';
+import { render } from './app.js';
 import { $sheet, LEVELS, MONTHS, cap, dm, dur, esc, fmt, fmt1, plural, stamp } from './ui.js';
 import { daysIn, focusIn, rate, setOf, state } from './core.js';
 import { sleepOf } from './progreso.js';
@@ -90,6 +91,7 @@ export function openReview(key) {
     ${qs.map(q => `<label class="field">${qLabel(q, p.kind)}<textarea name="${q}" rows="${q === 'focus' ? 1 : 3}" maxlength="2000">${esc(r.answers[q] ?? '')}</textarea></label>`).join('')}
     <p class="muted saved" aria-live="polite">Se guarda mientras escribes.</p>
     <div class="row">${r.doneAt ? `<button class="btn">Listo</button>` : `<button type="button" class="btn" data-act="review-done" data-d="${key}">Terminar revisión</button><button class="btn ghost">Seguir luego</button>`}</div>
+    ${state.reviews[key] ? `<button type="button" class="link danger" data-act="review-delete" data-d="${key}">Borrar esta revisión</button>` : ''}
   </form>`;
   const write = f => {
     const next = cleanReview({ answers: Object.fromEntries(qs.map(q => [q, f.get(q)])), doneAt: state.reviews[key]?.doneAt });
@@ -137,6 +139,13 @@ export function reviewList() {
 
 
 export const actions = {
+  'review-delete': async el => {
+    const k = el.dataset.d, label = periodLabel(periodOf(k));
+    if (!confirm(`¿Borrar la revisión de ${label.toLowerCase()}? Antes se guarda una copia automática.`)) return;
+    await snapshot(state, `Antes de borrar la revisión de ${label.toLowerCase()}`);
+    $sheet.addEventListener('close', () => { delete state.reviews[k]; save(state); render(); }, { once: true });
+    $sheet.close();
+  },
   'review': (el, e) => { const { h, d } = el.dataset;
     return openReview(d);
   },
