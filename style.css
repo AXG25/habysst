@@ -778,7 +778,7 @@ dialog form { padding-top: 16px; }
 .snapbox > .danger { margin-top: 10px; }
 .snap-act .danger { margin-top: 0; }
 /* The daily Latin maxim beside the month on Hoy */
-.motto { display: inline-block; margin-left: 10px; font: 400 0.72rem/1 var(--display); letter-spacing: 0.02em; color: var(--ink); white-space: nowrap; vertical-align: 1px; }
+.motto { display: inline-block; margin-left: 10px; font: 400 clamp(0.8rem, 4.1vw, 1.05rem)/1 'UnifrakturMaguntia', 'Old English Text MT', serif; margin-left: 8px; color: var(--ink); white-space: nowrap; }
 /* The HabyssT mark sits beside the big title only, so the month line (and its maxim) gets the full width. */
 .hero:has(.brand) > div { padding-right: 0; }
 .hero .brand { position: absolute; right: 0; top: calc(28px + env(safe-area-inset-top)); margin: 0; }

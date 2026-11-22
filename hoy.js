@@ -24,19 +24,9 @@ export const emptyState = `<section class="empty panel">
   <button class="btn" data-act="new">Crear hábito</button></section>`;
 
 
-// A Latin maxim under the date, a different one each day.
-const MOTTOS = [
-  ['memento mori', 'Recuerda que morirás'], ['carpe diem', 'Aprovecha el día'], ['amor fati', 'Ama tu destino'],
-  ['festina lente', 'Apresúrate despacio'], ['per aspera ad astra', 'Por lo difícil, a las estrellas'],
-  ['nulla dies sine linea', 'Ningún día sin una línea'], ['age quod agis', 'Haz bien lo que haces'], ['tempus fugit', 'El tiempo vuela'],
-  ['gutta cavat lapidem', 'La gota horada la piedra'], ['dum spiro spero', 'Mientras respiro, tengo esperanza'],
-  ['fortes fortuna adiuvat', 'La fortuna ayuda a los valientes'], ['labor omnia vincit', 'El trabajo todo lo vence'],
-];
-
 export function viewHoy() {
   const now = new Date(), key = ymd(now);
-  const [la, es] = MOTTOS[Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 864e5) % MOTTOS.length];
-  const motto = `<span class="motto" lang="la" title="${es}">${la}</span>`;
+  const motto = '<span class="motto" lang="la" title="Recuerda que morirás, aprovecha el día">Memento mori, carpe diem</span>';
   const head = header(`${DAYS[now.getDay()]} ${now.getDate()}`, `${cap(MONTHS[now.getMonth()])} ${now.getFullYear()}${motto}`, '', true);
   const metricsSec = fold('metrics', 'Métricas', '', secActions('metrics'),
     state.metrics.length ? metricRows(key, editMode === 'metrics') : `<p class="muted">Añade algo que quieras medir con un número: peso, páginas leídas, dinero ahorrado.</p>`);
