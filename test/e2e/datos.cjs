@@ -88,6 +88,11 @@ const check = (name, cond) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`)
   await p3.click('[data-tab=hoy]'); await p3.waitForTimeout(300);
   check('a crafted backup cannot run code', !(await p3.evaluate(() => window.__pwned)));
 
+  const p4 = await ctx.newPage(); await p4.goto(url); await p4.waitForTimeout(300);
+  await p4.evaluate(() => { const s = JSON.parse(localStorage.getItem('habysst')); s.habits = []; s.timer = { start: new Date().toISOString(), target: 25, goal: null, phase: 'work', pomo: 0 }; localStorage.setItem('habysst', JSON.stringify(s)); });
+  await p4.reload(); await p4.waitForTimeout(300);
+  check('a running session shows one clock, even with no habits', (await p4.$$('.focusbox')).length === 1);
+
   check('no script errors', errors.length === 0 || (console.log(errors), false));
   await browser.close(); server.close();
   console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

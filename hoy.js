@@ -32,8 +32,10 @@ export function viewHoy() {
   const head = header(`${DAYS[now.getDay()]} ${now.getDate()}`, `${cap(MONTHS[now.getMonth()])} ${now.getFullYear()}${motto}`, '', true);
   const metricsSec = fold('metrics', 'Métricas', '', secActions('metrics'),
     state.metrics.length ? metricRows(key, editMode === 'metrics') : `<p class="muted">Añade algo que quieras medir con un número: peso, páginas leídas, dinero ahorrado.</p>`);
+  // A running session sits on top; the start button sits at the bottom. Never both.
   const top = head + reviewNotice(now) + (state.timer ? focusBox(key) : '');
-  if (!state.habits.length) return top + fold('habits', 'Hábitos', '', secActions('habits'), emptyState) + checkIn(key) + metricsSec + focusBox(key);
+  const bottom = state.timer ? '' : focusBox(key);
+  if (!state.habits.length) return top + fold('habits', 'Hábitos', '', secActions('habits'), emptyState) + checkIn(key) + metricsSec + bottom;
 
   const pendingFirst = list => [...list.filter(h => !setOf(h).has(key)), ...list.filter(h => setOf(h).has(key))];
   const due = pendingFirst(state.habits.filter(h => dueOn(h, now)));
@@ -62,7 +64,7 @@ export function viewHoy() {
     ${rest.length ? `<h3 class="sub-sm">Hoy no toca</h3><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}`) + `
   ${checkIn(key)}
   ${metricsSec}
-  ${state.timer ? '' : focusBox(key)}`;
+  ${bottom}`;
 }
 
 
