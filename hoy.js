@@ -1,3 +1,4 @@
+import { mottoOf } from './mottos.js';
 import { ymd, parseYmd } from './logic.js';
 import { save, snapshot, cleanFreq, TONES } from './store.js';
 import { $sheet, DAYS, MONTHS, TONE_NAMES, WD, cap, esc, fold, header, radio, setUi, stamp, ui } from './ui.js';
@@ -26,7 +27,8 @@ export const emptyState = `<section class="empty panel">
 
 export function viewHoy() {
   const now = new Date(), key = ymd(now);
-  const motto = '<span class="motto" lang="la" title="Recuerda que morirás, aprovecha el día">Memento mori, carpe diem</span>';
+  const [la] = mottoOf(now);
+  const motto = `<button class="motto" lang="la" data-act="motto" aria-label="Frase del día: ${la}. Ver su significado">${la}</button>`;
   const head = header(`${DAYS[now.getDay()]} ${now.getDate()}`, `${cap(MONTHS[now.getMonth()])} ${now.getFullYear()}${motto}`, '', true);
   const metricsSec = fold('metrics', 'Métricas', '', secActions('metrics'),
     state.metrics.length ? metricRows(key, editMode === 'metrics') : `<p class="muted">Añade algo que quieras medir con un número: peso, páginas leídas, dinero ahorrado.</p>`);
@@ -138,6 +140,18 @@ export function openEditor(h) {
 
 
 export const actions = {
+  'motto': () => {
+    const [la, es, note] = mottoOf(new Date());
+    $sheet.redraw = null;
+    $sheet.innerHTML = `<form method="dialog" class="motto-sheet">
+      <h2 tabindex="-1" autofocus lang="la">${la}</h2>
+      <p class="motto-es">${es}</p>
+      <p class="muted">${note}</p>
+      <p class="muted small">Mañana, otra frase.</p>
+      <div class="row"><button class="btn">Cerrar</button></div>
+    </form>`;
+    $sheet.showModal();
+  },
   'toggle': (el, e) => { const { h, d } = el.dataset;
     glide('#view .habits [data-act="toggle"]', 'h', () => {
       toggle(h, d);

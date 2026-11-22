@@ -31,6 +31,7 @@ Pruebas:
 | `enfoque.js` | Sesiones de enfoque, Pomodoro y modo zen |
 | `ajustes.js` | Ajustes, tema, respaldo, copias automáticas |
 | `logic.js` | Cálculos puros (fechas, rachas, periodos) |
+| `mottos.js` | La frase en latín del día en Hoy, con su traducción y sentido |
 | `seed.js` | Primer arranque: hábitos, metas, métricas y listas iniciales, y un historial de 90 días que se puede borrar desde Ajustes |
 | `tutorial.js` | Tutorial guiado con [Driver.js](https://driverjs.com) (incluido en `vendor/driver`, licencia MIT) |
 | `store.js` | Guardado, validación de datos, copia interna y recuperación |

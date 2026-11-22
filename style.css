@@ -783,3 +783,7 @@ dialog form { padding-top: 16px; }
 .hero:has(.brand) > div { padding-right: 0; }
 .hero .brand { position: absolute; right: 0; top: calc(28px + env(safe-area-inset-top)); margin: 0; }
 .hero:has(.brand) h1 { padding-right: 96px; }
+button.motto { padding: 4px 0; text-decoration: underline dotted 1px; text-underline-offset: 4px; cursor: pointer; }
+.motto-sheet h2 { font: 400 clamp(1.8rem, 9vw, 2.4rem)/1.1 'UnifrakturMaguntia', 'Old English Text MT', serif; margin-bottom: 10px; }
+.motto-es { margin: 0 0 6px; font-weight: 700; font-size: 1.1rem; }
+.motto-sheet p { margin-top: 0; }

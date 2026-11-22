@@ -246,3 +246,12 @@ test('custom review questions are kept, answers keyed by question text, empty an
   assert.deepEqual(fromJSON({ version: 1, habits: [], done: {}, reviewPrompts: [] }).reviewPrompts, {}); // empty means built-in
   assert.equal(cleanReview({ answers: { x: '' } }), null);
 });
+
+test('daily Latin maxims: complete entries, no duplicates, same all day, change the next day', async () => {
+  const { MOTTOS, mottoOf } = await import('../mottos.js');
+  assert.ok(MOTTOS.length >= 60);
+  assert.ok(MOTTOS.every(m => m.length === 3 && m.every(x => typeof x === 'string' && x.trim())));
+  assert.equal(new Set(MOTTOS.map(m => m[0].toLowerCase())).size, MOTTOS.length);
+  assert.equal(mottoOf(new Date(2026, 10, 22, 0, 5)), mottoOf(new Date(2026, 10, 22, 23, 55)));
+  assert.notEqual(mottoOf(new Date(2026, 10, 22)), mottoOf(new Date(2026, 10, 23)));
+});
