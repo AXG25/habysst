@@ -81,20 +81,24 @@ export function reviewData(p) {
 
 
 export function openReview(key) {
-  const p = periodOf(key), qs = qsFor(p.kind);
+  const p = periodOf(key);
   const r = state.reviews[key] ?? { answers: {}, doneAt: null };
+  // Your own questions (or the built-in ones), plus any already answered here, and always the priority last.
+  const base = state.reviewPrompts ?? qsFor(p.kind).filter(q => q !== 'focus');
+  const qs = [...new Set([...base, ...Object.keys(r.answers).filter(q => q !== 'focus')]), 'focus'];
+  const label = q => (REVIEW_QS.includes(q) ? qLabel(q, p.kind) : esc(q));
   $sheet.redraw = null;
   $sheet.innerHTML = `<form method="dialog" id="review" class="entry">
     <h2 tabindex="-1" autofocus>${periodLabel(p)}</h2>
     ${reviewData(p)}
     <h3>Tu revisión</h3>
-    ${qs.map(q => `<label class="field">${qLabel(q, p.kind)}<textarea name="${q}" rows="${q === 'focus' ? 1 : 3}" maxlength="2000">${esc(r.answers[q] ?? '')}</textarea></label>`).join('')}
+    ${qs.map((q, i) => `<label class="field">${label(q)}<textarea name="q${i}" rows="${q === 'focus' ? 1 : 3}" maxlength="2000">${esc(r.answers[q] ?? '')}</textarea></label>`).join('')}
     <p class="muted saved" aria-live="polite">Se guarda mientras escribes.</p>
     <div class="row">${r.doneAt ? `<button class="btn">Listo</button>` : `<button type="button" class="btn" data-act="review-done" data-d="${key}">Terminar revisión</button><button class="btn ghost">Seguir luego</button>`}</div>
     ${state.reviews[key] ? `<button type="button" class="link danger" data-act="review-delete" data-d="${key}">Borrar esta revisión</button>` : ''}
   </form>`;
   const write = f => {
-    const next = cleanReview({ answers: Object.fromEntries(qs.map(q => [q, f.get(q)])), doneAt: state.reviews[key]?.doneAt });
+    const next = cleanReview({ answers: Object.fromEntries(qs.map((q, i) => [q, f.get(`q${i}`)])), doneAt: state.reviews[key]?.doneAt });
     if (next) state.reviews[key] = next;
     else delete state.reviews[key];
   };
@@ -105,7 +109,7 @@ export function openReview(key) {
 
 export function finishReview(key) {
   $sheet.flush();
-  state.reviews[key] = { ...(state.reviews[key] ?? { answers: Object.fromEntries(REVIEW_QS.map(q => [q, ''])) }), doneAt: ymd(new Date()) };
+  state.reviews[key] = { ...(state.reviews[key] ?? { answers: {} }), doneAt: ymd(new Date()) };
   save(state);
   $sheet.close();
   stamp('Revisada');

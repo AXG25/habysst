@@ -120,7 +120,10 @@ export function viewDiario() {
     <div id="entries">${entryCards('')}</div>
     <details class="closed"><summary>Preguntas guía</summary>
       <label class="field">Una por línea. Déjalo vacío si prefieres escribir libre.<textarea id="prompts" rows="4">${esc(state.prompts.join('\n'))}</textarea></label>
-      <button class="btn" data-act="prompts">Guardar preguntas</button></details>`;
+      <button class="btn" data-act="prompts">Guardar preguntas</button></details>
+    <details class="closed"><summary>Preguntas de las revisiones</summary>
+      <label class="field">Una por línea. La pregunta por tu prioridad del siguiente periodo se hace siempre, porque es la que aparece en Hoy. Déjalo vacío para volver a las preguntas originales.<textarea id="review-prompts" rows="4" placeholder="¿Qué funcionó?&#10;¿Qué no funcionó y por qué?&#10;¿Qué vas a cambiar?">${esc((state.reviewPrompts ?? []).join('\n'))}</textarea></label>
+      <button class="btn" data-act="review-prompts">Guardar preguntas</button></details>`;
 }
 
 
@@ -274,6 +277,12 @@ export const actions = {
   },
   'rate': (el, e) => { const { h, d } = el.dataset;
     return rate5(el.dataset.k, d, +el.dataset.v);
+  },
+  'review-prompts': () => {
+    const qs = document.getElementById('review-prompts').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 8);
+    state.reviewPrompts = qs.length ? qs : null;
+    save(state);
+    render();
   },
   'prompts': (el, e) => { 
     return savePrompts();

@@ -234,3 +234,14 @@ test('first-run starter: complete recipe, 90 days of history, and exact removal 
   assert.equal(s.focus.length, 0);
   assert.equal(s.habits.length, 6); // the recipe itself stays
 });
+
+test('custom review questions are kept, answers keyed by question text, empty answers dropped', async () => {
+  const { fromJSON, toJSON, cleanReview } = await import('../store.js');
+  const s = fromJSON({ version: 1, habits: [], done: {}, reviewPrompts: ['¿De qué estoy orgulloso?', ' ', '¿Qué evité?'],
+    reviews: { '2026-11-16': { answers: { '¿De qué estoy orgulloso?': 'Correr', focus: 'Dormir', worked: '' }, doneAt: '2026-11-22' } } });
+  assert.deepEqual(s.reviewPrompts, ['¿De qué estoy orgulloso?', '¿Qué evité?']);
+  assert.deepEqual(s.reviews['2026-11-16'].answers, { '¿De qué estoy orgulloso?': 'Correr', focus: 'Dormir' });
+  assert.equal(fromJSON(JSON.parse(JSON.stringify(toJSON(s)))).reviewPrompts.length, 2);
+  assert.equal(fromJSON({ version: 1, habits: [], done: {}, reviewPrompts: [] }).reviewPrompts, null); // empty means built-in
+  assert.equal(cleanReview({ answers: { x: '' } }), null);
+});

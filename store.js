@@ -40,9 +40,11 @@ const REVIEW_KEY = /^(\d{4}-\d{2}-\d{2}|M-\d{4}-(0[1-9]|1[0-2])|Q-\d{4}-[1-4]|Y-
 
 export function cleanReview(r) {
   if (!r || typeof r !== 'object') return null;
-  const answers = Object.fromEntries(REVIEW_QS.map(q => [q, str(r.answers?.[q], 2000)]));
+  // Keys are the built-in question ids or the text of a custom question; empty answers are dropped.
+  const answers = Object.fromEntries(Object.entries(r.answers && typeof r.answers === 'object' ? r.answers : {})
+    .map(([q, a]) => [str(q, 120), str(a, 2000)]).filter(([q, a]) => q && a));
   const doneAt = date(r.doneAt);
-  return doneAt || Object.values(answers).some(Boolean) ? { answers, doneAt } : null;
+  return doneAt || Object.keys(answers).length ? { answers, doneAt } : null;
 }
 
 export function cleanGoal(g, habitIds) {
@@ -72,7 +74,7 @@ export function cleanGoal(g, habitIds) {
   };
 }
 
-const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviews: {}, compass: { values: [], vision: '' }, lists: [], metrics: [], values: {}, focus: [], timer: null, demo: null, lastBackup: null });
+const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviewPrompts: null, reviews: {}, compass: { values: [], vision: '' }, lists: [], metrics: [], values: {}, focus: [], timer: null, demo: null, lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
@@ -100,6 +102,9 @@ export function fromJSON(obj) {
     if (DATE.test(k) && entry) journal[k] = entry;
   }
   const prompts = Array.isArray(obj.prompts) ? obj.prompts.map(x => str(x, 120)).filter(Boolean).slice(0, 8) : [...DEFAULT_PROMPTS];
+  // Custom review questions; null means the built-in ones.
+  const rp = Array.isArray(obj.reviewPrompts) ? obj.reviewPrompts.map(x => str(x, 120)).filter(Boolean).slice(0, 8) : [];
+  const reviewPrompts = rp.length ? rp : null;
   const reviews = {};
   for (const [k, r] of Object.entries(obj.reviews && typeof obj.reviews === 'object' ? obj.reviews : {})) {
     const review = cleanReview(r);
@@ -137,7 +142,7 @@ export function fromJSON(obj) {
   const demo = dm && typeof dm === 'object'
     ? { done: byId(dm.done), journal: dates(dm.journal), values: byId(dm.values), focus: (Array.isArray(dm.focus) ? dm.focus : []).filter(iso) }
     : null;
-  return { version: 1, habits, done, goals, journal, prompts, reviews, compass, lists, metrics, values, focus, timer, demo, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
+  return { version: 1, habits, done, goals, journal, prompts, reviewPrompts, reviews, compass, lists, metrics, values, focus, timer, demo, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
 }
 
 export const toJSON = s => ({
@@ -146,6 +151,7 @@ export const toJSON = s => ({
   goals: s.goals,
   journal: s.journal,
   prompts: s.prompts,
+  reviewPrompts: s.reviewPrompts,
   reviews: s.reviews,
   compass: s.compass,
   lists: s.lists,
