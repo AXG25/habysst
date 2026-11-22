@@ -21,7 +21,7 @@ export function focusBox(key) {
     <span class="hmeta" id="clocklabel">${phaseLabel()}</span>
     <span class="clock" id="clock">${clockText()}</span>
     ${goal ? `<span class="hmeta">Para: ${esc(goal.title)}</span>` : ''}
-    <div class="row">${focusButtons()}<button class="btn ghost" data-act="zen">Modo zen</button></div>
+    <div class="row">${focusButtons()}<button class="btn ghost" data-act="zen" aria-label="Modo zen">Zen</button></div>
   </section>`;
 }
 
@@ -111,6 +111,7 @@ export function renderZen() {
   $zen.innerHTML = `<p class="zen-phase">${phaseLabel()}</p>
     <div class="zen-ring">
       <svg viewBox="0 0 260 260" aria-hidden="true"><circle cx="130" cy="130" r="118" class="track"/><circle cx="130" cy="130" r="118" class="fill" id="zring" pathLength="1" style="stroke-dashoffset:${ringLeft()}"/></svg>
+      <span class="brand" aria-hidden="true">HabyssT</span>
       <span class="zen-clock" id="zclock">${clockText()}</span>
     </div>
     ${goal ? `<p class="zen-goal">${esc(goal.title)}</p>` : ''}

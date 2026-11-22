@@ -486,7 +486,9 @@ dialog .metrics { margin: 8px 0 12px; }
 .focusbox.running { justify-items: stretch; border-width: 3px; }
 .clock { font: 400 clamp(3rem, 18vw, 4.5rem)/1 var(--display); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .clock.over { color: var(--hanko); }
+.focusbox .row, .zen .row { flex-wrap: nowrap; }
 .focusbox .row { margin-top: 6px; }
+.focusbox .row .btn { flex: 1; min-width: 0; padding-inline: 6px; }
 .focusbox.idle { margin: 24px 0 0; padding: 0; justify-items: stretch; }
 
 /* Analysis */
@@ -553,6 +555,7 @@ body.zen-on { overflow: hidden; }
 /* The ring empties as time passes; linear because it is constant motion. */
 .zen-ring .fill { fill: none; stroke: var(--ink); stroke-width: 7; stroke-linecap: round; stroke-dasharray: 1; transition: stroke-dashoffset 1s linear; }
 .zen-clock { font: 400 clamp(3rem, 17vw, 4.6rem)/1 var(--display); font-variant-numeric: tabular-nums; }
+.zen-ring .brand { position: absolute; top: 21%; margin: 0; }
 .zen-goal { margin: 0; font-weight: 700; max-width: 30ch; }
 .zen .row { justify-content: center; }
 /* During a break the ring breathes: 4 s in, 4 s out. Follow it with your breath. */
