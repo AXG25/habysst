@@ -558,6 +558,20 @@ body.zen-on { overflow: hidden; }
 .zen-ring .brand { position: absolute; top: 21%; margin: 0; }
 .zen-goal { margin: 0; font-weight: 700; max-width: 30ch; }
 .zen .row { justify-content: center; }
+/* Phone on its side: the ring fills the height on the left, words and buttons stack on the right. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .zen {
+    grid-template-columns: auto minmax(0, 260px); grid-template-rows: 1fr auto auto auto 1fr;
+    grid-template-areas: 'ring .' 'ring phase' 'ring goal' 'ring row' 'ring .';
+    column-gap: clamp(24px, 6vw, 64px); row-gap: 12px; justify-items: start; text-align: left;
+    padding: 16px calc(24px + env(safe-area-inset-right)) 16px calc(24px + env(safe-area-inset-left));
+  }
+  .zen-ring { grid-area: ring; width: min(calc(100dvh - 32px), 340px); container-type: inline-size; }
+  .zen-clock { font-size: 21cqi; }
+  .zen-phase { grid-area: phase; }
+  .zen-goal { grid-area: goal; }
+  .zen .row { grid-area: row; flex-direction: column; align-items: stretch; width: 100%; margin-top: 4px; }
+}
 /* During a break the ring breathes: 4 s in, 4 s out. Follow it with your breath. */
 @keyframes breathe { 50% { transform: scale(1.06); } }
 .zen.break .zen-ring { animation: breathe 8s ease-in-out infinite; }
