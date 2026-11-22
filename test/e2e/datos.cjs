@@ -63,14 +63,14 @@ const check = (name, cond) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`)
   await restore.click(); await p.waitForTimeout(900);
   check('restoring a snapshot brings deleted data back', (await ls()).done.h1?.length === 2);
 
-  await p.click('[data-act=new]'); await p.fill('#editor input[name=name]', 'Temporal'); await p.click('#editor .btn'); await p.waitForTimeout(200);
+  await p.click('[data-act=new]'); await p.fill('#editor input[name=label]', 'Temporal'); await p.click('#editor .btn'); await p.waitForTimeout(200);
   await p.evaluate(() => { const s = JSON.parse(localStorage.getItem('habysst')); s.habits = s.habits.filter(h => h.name === 'Temporal'); s.done = {}; s.journal = {}; localStorage.setItem('habysst', JSON.stringify(s)); });
   await p.reload(); await p.waitForTimeout(300);
   await p.click('[data-tab=habitos]'); await p.click('[data-act=edit]'); await p.click('[data-act=delete]'); await p.waitForTimeout(1200);
   check('an emptied app never overwrites a full second copy', JSON.parse(await idb('get', 'current')).habits.length >= 2);
 
   const p2 = await ctx.newPage(); await p2.goto(url); await p2.waitForTimeout(300);
-  await p2.click('[data-act=new]'); await p2.fill('#editor input[name=name]', 'Otra pestaña'); await p2.click('#editor .btn'); await p2.waitForTimeout(400);
+  await p2.click('[data-act=new]'); await p2.fill('#editor input[name=label]', 'Otra pestaña'); await p2.click('#editor .btn'); await p2.waitForTimeout(400);
   await p.click('[data-tab=hoy]'); await p.waitForTimeout(300);
   await p.click('#fold-checkin [data-k=mood][data-v="3"]'); await p.waitForTimeout(300);
   check('two open tabs do not overwrite each other', (await ls()).habits.some(h => h.name === 'Otra pestaña'));

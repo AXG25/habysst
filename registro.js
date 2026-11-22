@@ -237,14 +237,14 @@ export function openMetricEditor(m) {
   $sheet.innerHTML = `<form id="meditor">
     <h2${m ? ' tabindex="-1" autofocus' : ''}>${m ? 'Editar métrica' : 'Nueva métrica'}</h2>
     <p class="muted">Algo que quieras medir con un número: peso, páginas leídas, dinero ahorrado, cigarrillos.</p>
-    <label class="field">Nombre<input name="name" required maxlength="40" value="${m ? esc(m.name) : ''}" placeholder="Peso" autocomplete="off"></label>
+    <label class="field">Nombre<input name="label" required maxlength="40" value="${m ? esc(m.name) : ''}" placeholder="Peso" autocomplete="off"></label>
     <label class="field">Unidad<input name="unit" maxlength="12" value="${m ? esc(m.unit) : ''}" placeholder="kg" autocomplete="off"></label>
     <div class="row"><button class="btn">${m ? 'Guardar' : 'Crear métrica'}</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
     ${m ? `<button type="button" class="link danger" data-act="metric-delete" data-m="${m.id}">Borrar métrica y sus valores</button>` : ''}
   </form>`;
   $sheet.querySelector('#meditor').onsubmit = e => {
     e.preventDefault();
-    const name = e.target.name.value.trim(), unit = e.target.unit.value.trim();
+    const name = e.target.label.value.trim(), unit = e.target.unit.value.trim();
     if (!name) return;
     if (m) Object.assign(m, { name, unit });
     else { const id = crypto.randomUUID(); state.metrics.push({ id, name, unit }); state.values[id] = {}; }

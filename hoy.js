@@ -101,7 +101,7 @@ export function openEditor(h) {
   $sheet.redraw = null;
   $sheet.innerHTML = `<form id="editor">
     <h2${h ? ' tabindex="-1" autofocus' : ''}>${h ? 'Editar hábito' : 'Nuevo hábito'}</h2>
-    <label class="field">Nombre<input name="name" required maxlength="60" value="${h ? esc(h.name) : ''}" placeholder="Leer 20 minutos" autocomplete="off"></label>
+    <label class="field">Nombre<input name="label" required maxlength="60" value="${h ? esc(h.name) : ''}" placeholder="Leer 20 minutos" autocomplete="off"></label>
     <fieldset class="freq"><legend>Frecuencia</legend>
       <div class="opts">${radio('ftype', 'daily', 'Diario', fq.type === 'daily')}${radio('ftype', 'days', 'Días concretos', fq.type === 'days')}${radio('ftype', 'weekly', 'Veces por semana', fq.type === 'weekly')}</div>
       <div class="when-days weekdays" role="group" aria-label="Días">${WD.map((d, i) => `<label><input type="checkbox" name="days" value="${i}"${days.includes(i) ? ' checked' : ''}><span>${d}</span></label>`).join('')}</div>
@@ -117,7 +117,7 @@ export function openEditor(h) {
   $sheet.querySelector('#editor').onsubmit = e => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const name = f.get('name').trim();
+    const name = f.get('label').trim();
     if (!name) return;
     const freq = cleanFreq({ type: f.get('ftype'), days: f.getAll('days').map(Number), times: +f.get('times') });
     if (f.get('ftype') !== freq.type) return alert(f.get('ftype') === 'days' ? 'Elige al menos un día.' : 'Las veces por semana van de 1 a 6.');

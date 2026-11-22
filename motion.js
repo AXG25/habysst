@@ -50,6 +50,8 @@ new MutationObserver(() => {
   if (!$sheet.querySelector(':scope > .grab')) $sheet.insertAdjacentHTML('afterbegin', '<div class="grab" aria-hidden="true"></div>');
 }).observe($sheet, { childList: true });
 
+// Every sheet opens at the top, not where the previous one was scrolled.
+$sheet.addEventListener('close', () => { $sheet.scrollTop = 0; });
 export let drag = null;
 
 $sheet.addEventListener('pointerdown', e => {

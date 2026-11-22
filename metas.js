@@ -291,13 +291,13 @@ export function openListEditor(l) {
   $sheet.redraw = null;
   $sheet.innerHTML = `<form id="listf">
     <h2>${l ? 'Lista' : 'Nueva lista'}</h2>
-    <label class="field">Nombre<input name="name" required maxlength="60" value="${l ? esc(l.name) : ''}" placeholder="Antes de morir" autocomplete="off"></label>
+    <label class="field">Nombre<input name="label" required maxlength="60" value="${l ? esc(l.name) : ''}" placeholder="Antes de morir" autocomplete="off"></label>
     <div class="row"><button class="btn">${l ? 'Guardar' : 'Crear lista'}</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
     ${l ? `<button type="button" class="link danger" data-act="list-delete" data-l="${l.id}">Borrar lista</button>` : ''}
   </form>`;
   $sheet.querySelector('#listf').onsubmit = e => {
     e.preventDefault();
-    const name = e.target.name.value.trim();
+    const name = e.target.label.value.trim();
     if (!name) return;
     $sheet.close();
     if (l) { l.name = name; save(state); render(); } else createList(name);
