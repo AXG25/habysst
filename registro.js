@@ -1,8 +1,8 @@
 import { ymd, reviewPeriod, sleepMins } from './logic.js';
-import { save, snapshot, cleanEntry } from './store.js';
+import { save, snapshot, cleanEntry, PERIODS } from './store.js';
 import { $sheet, KINDS, LEVELS, cap, dur, esc, fmt, fold, header, longDate, plural } from './ui.js';
 import { entryOf, state, unit, valOf } from './core.js';
-import { PERIOD, reviewList } from './revisiones.js';
+import { PERIOD, qLabel, qsFor, reviewList } from './revisiones.js';
 import { u } from './metas.js';
 import { render } from './app.js';
 
@@ -122,7 +122,8 @@ export function viewDiario() {
       <label class="field">Una por línea. Déjalo vacío si prefieres escribir libre.<textarea id="prompts" rows="4">${esc(state.prompts.join('\n'))}</textarea></label>
       <button class="btn" data-act="prompts">Guardar preguntas</button></details>
     <details class="closed"><summary>Preguntas de las revisiones</summary>
-      <label class="field">Una por línea. La pregunta por tu prioridad del siguiente periodo se hace siempre, porque es la que aparece en Hoy. Déjalo vacío para volver a las preguntas originales.<textarea id="review-prompts" rows="4" placeholder="¿Qué funcionó?&#10;¿Qué no funcionó y por qué?&#10;¿Qué vas a cambiar?">${esc((state.reviewPrompts ?? []).join('\n'))}</textarea></label>
+      <p class="muted small">Una por línea, distintas para cada periodo. La pregunta por tu prioridad se hace siempre, porque es la que aparece en Hoy. Deja un cuadro vacío para usar las preguntas originales de ese periodo, que ves en gris.</p>
+      ${PERIODS.map(k => `<label class="field">${cap(PERIOD[k].name)}<textarea id="review-prompts-${k}" rows="4" placeholder="${qsFor(k).filter(q => q !== 'focus').map(q => esc(qLabel(q, k))).join('&#10;')}">${esc((state.reviewPrompts[k] ?? []).join('\n'))}</textarea></label>`).join('')}
       <button class="btn" data-act="review-prompts">Guardar preguntas</button></details>`;
 }
 
@@ -279,8 +280,7 @@ export const actions = {
     return rate5(el.dataset.k, d, +el.dataset.v);
   },
   'review-prompts': () => {
-    const qs = document.getElementById('review-prompts').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 8);
-    state.reviewPrompts = qs.length ? qs : null;
+    state.reviewPrompts = Object.fromEntries(PERIODS.map(k => [k, document.getElementById(`review-prompts-${k}`).value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 8)]).filter(([, v]) => v.length));
     save(state);
     render();
   },

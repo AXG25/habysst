@@ -84,7 +84,7 @@ export function openReview(key) {
   const p = periodOf(key);
   const r = state.reviews[key] ?? { answers: {}, doneAt: null };
   // Your own questions (or the built-in ones), plus any already answered here, and always the priority last.
-  const base = state.reviewPrompts ?? qsFor(p.kind).filter(q => q !== 'focus');
+  const base = state.reviewPrompts[p.kind] ?? qsFor(p.kind).filter(q => q !== 'focus');
   const qs = [...new Set([...base, ...Object.keys(r.answers).filter(q => q !== 'focus')]), 'focus'];
   const label = q => (REVIEW_QS.includes(q) ? qLabel(q, p.kind) : esc(q));
   $sheet.redraw = null;

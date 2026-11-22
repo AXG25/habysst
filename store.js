@@ -36,6 +36,7 @@ export function cleanEntry(e) {
 }
 
 export const REVIEW_QS = ['worked', 'didnt', 'change', 'focus', 'vision'];
+export const PERIODS = ['week', 'month', 'quarter', 'year'];
 const REVIEW_KEY = /^(\d{4}-\d{2}-\d{2}|M-\d{4}-(0[1-9]|1[0-2])|Q-\d{4}-[1-4]|Y-\d{4})$/;
 
 export function cleanReview(r) {
@@ -74,7 +75,7 @@ export function cleanGoal(g, habitIds) {
   };
 }
 
-const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviewPrompts: null, reviews: {}, compass: { values: [], vision: '' }, lists: [], metrics: [], values: {}, focus: [], timer: null, demo: null, lastBackup: null });
+const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviewPrompts: {}, reviews: {}, compass: { values: [], vision: '' }, lists: [], metrics: [], values: {}, focus: [], timer: null, demo: null, lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
@@ -103,8 +104,11 @@ export function fromJSON(obj) {
   }
   const prompts = Array.isArray(obj.prompts) ? obj.prompts.map(x => str(x, 120)).filter(Boolean).slice(0, 8) : [...DEFAULT_PROMPTS];
   // Custom review questions; null means the built-in ones.
-  const rp = Array.isArray(obj.reviewPrompts) ? obj.reviewPrompts.map(x => str(x, 120)).filter(Boolean).slice(0, 8) : [];
-  const reviewPrompts = rp.length ? rp : null;
+  // Custom review questions per period; a missing period uses the built-in ones.
+  // An older backup stored one list for every period: it applies to all four.
+  const qlist = a => { const l = Array.isArray(a) ? a.map(x => str(x, 120)).filter(Boolean).slice(0, 8) : []; return l.length ? l : undefined; };
+  const rpIn = Array.isArray(obj.reviewPrompts) ? Object.fromEntries(PERIODS.map(k => [k, obj.reviewPrompts])) : obj.reviewPrompts ?? {};
+  const reviewPrompts = Object.fromEntries(PERIODS.map(k => [k, qlist(rpIn[k])]).filter(([, v]) => v));
   const reviews = {};
   for (const [k, r] of Object.entries(obj.reviews && typeof obj.reviews === 'object' ? obj.reviews : {})) {
     const review = cleanReview(r);

@@ -239,9 +239,10 @@ test('custom review questions are kept, answers keyed by question text, empty an
   const { fromJSON, toJSON, cleanReview } = await import('../store.js');
   const s = fromJSON({ version: 1, habits: [], done: {}, reviewPrompts: ['¿De qué estoy orgulloso?', ' ', '¿Qué evité?'],
     reviews: { '2026-11-16': { answers: { '¿De qué estoy orgulloso?': 'Correr', focus: 'Dormir', worked: '' }, doneAt: '2026-11-22' } } });
-  assert.deepEqual(s.reviewPrompts, ['¿De qué estoy orgulloso?', '¿Qué evité?']);
+  assert.deepEqual(s.reviewPrompts.year, ['¿De qué estoy orgulloso?', '¿Qué evité?']); // an old single list applies to every period
   assert.deepEqual(s.reviews['2026-11-16'].answers, { '¿De qué estoy orgulloso?': 'Correr', focus: 'Dormir' });
-  assert.equal(fromJSON(JSON.parse(JSON.stringify(toJSON(s)))).reviewPrompts.length, 2);
-  assert.equal(fromJSON({ version: 1, habits: [], done: {}, reviewPrompts: [] }).reviewPrompts, null); // empty means built-in
+  assert.equal(fromJSON(JSON.parse(JSON.stringify(toJSON(s)))).reviewPrompts.week.length, 2);
+  assert.deepEqual(fromJSON({ version: 1, habits: [], done: {}, reviewPrompts: { year: ['¿Qué aprendí este año?'], week: [' '] } }).reviewPrompts, { year: ['¿Qué aprendí este año?'] });
+  assert.deepEqual(fromJSON({ version: 1, habits: [], done: {}, reviewPrompts: [] }).reviewPrompts, {}); // empty means built-in
   assert.equal(cleanReview({ answers: { x: '' } }), null);
 });
