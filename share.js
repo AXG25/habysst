@@ -4,7 +4,6 @@ import { addDays, constancy, monthRow, runs, ymd } from './logic.js';
 import { info, setOf, state } from './core.js';
 import { mottoOf } from './mottos.js';
 import { $sheet, MONTHS, cap } from './ui.js';
-import { cursor } from './progreso.js';
 
 export const W = 1080, H = 1920;
 const M = 72, INK = '#000000', PAPER = '#ffffff', HANKO = '#d42a1f', RULE = '#d6d6d6', MUTED = '#6b6b6b';
@@ -57,11 +56,12 @@ export async function drawPoster(canvas, { names, year }) {
   const c = constancy(habits.map(h => ({ freq: h.freq, done: setOf(h) })), now);
   ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
   topBand(ctx, now);
-  headline(ctx, c, year);
+  const head = headline(ctx, c, year);
   yearGrid(ctx, habits, year);
   statsLine(ctx, c, habits.length, year);
   legend(ctx, habits, names);
   footer(ctx);
+  return `${head}${c.rate === null ? '' : `, ${c.rate}% cumplido`}${c.streak > 0 ? `, ${year}` : ''}`; // what the image says, for its aria-label
 }
 
 function topBand(ctx, now) {
@@ -104,6 +104,7 @@ function headline(ctx, { streak, days }, year) {
   ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.strokeRect(bx, by - 40, bw, 92);
   ctx.fillStyle = INK; ctx.fillText(line, bx + 28, by + 22);
   ctx.lineWidth = 6; ctx.strokeRect(PANEL.x, PANEL.y, PANEL.w, PANEL.h);
+  return `${n} ${line}`;
 }
 
 // Manga focus lines: thin ink wedges aimed at the number, clipped to the panel.
@@ -172,7 +173,7 @@ function bar(ctx, x, y, w, h, fill, openL, openR) {
 }
 
 function statsLine(ctx, { rate }, n, year) {
-  const parts = [rate === null ? null : `${rate}% de días cumplidos`, `${n} ${n === 1 ? 'hábito' : 'hábitos'}`, String(year)].filter(Boolean);
+  const parts = [rate === null ? null : `${rate}% cumplido`, `${n} ${n === 1 ? 'hábito' : 'hábitos'}`, String(year)].filter(Boolean);
   ctx.fillStyle = INK; ctx.fillRect(M, 1524, W - 2 * M, 4);
   ctx.font = `700 36px ${BODY}`; ctx.textAlign = 'left';
   ctx.fillText(parts.join('  ·  '), M, 1582);
@@ -218,6 +219,7 @@ let ready;
 function preview(names, year) {
   const canvas = $sheet.querySelector('.poster');
   ready = drawPoster(canvas, { names, year })
+    .then(text => canvas.setAttribute('aria-label', `Imagen de tu constancia: ${text}`))
     .then(() => new Promise(r => canvas.toBlob(r, 'image/png')))
     .then(blob => new File([blob], `habysst-${year}.png`, { type: 'image/png' }));
 }
@@ -230,11 +232,11 @@ function download(file) {
 
 export const actions = {
   'share-open': () => {
-    const year = cursor.getFullYear();
+    const year = new Date().getFullYear(); // constancy() counts the current year, so the poster is always this year
     $sheet.redraw = null;
     $sheet.innerHTML = `<form id="sharef" class="entry">
       <h2 tabindex="-1" autofocus>Compartir tu constancia</h2>
-      <canvas class="poster panel" width="${W}" height="${H}" role="img" aria-label="Imagen de tu constancia en ${year}: tus rachas del año, día a día"></canvas>
+      <canvas class="poster panel" width="${W}" height="${H}" role="img" aria-label="Imagen de tu constancia"></canvas>
       <label class="opt"><input type="checkbox" name="names">Mostrar nombres de los hábitos</label>
       <div class="row"><button type="button" class="btn" data-act="share-go">Compartir</button><button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
     </form>`;
@@ -244,15 +246,16 @@ export const actions = {
     preview(false, year);
     $sheet.showModal();
   },
-  'share-go': async () => {
+  'share-go': async el => {
+    el.disabled = true; // a second tap while the share menu is open would fail
     const file = await ready;
     try {
       if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: 'HabyssT' });
       else download(file);
     } catch (e) {
-      if (e.name === 'AbortError') return; // closed the share menu: stay on the sheet
+      if (e.name === 'AbortError' || e.name === 'InvalidStateError') return; // closed the menu, or one already open: stay on the sheet
       download(file);
-    }
+    } finally { el.disabled = false; }
     $sheet.close();
   },
 };

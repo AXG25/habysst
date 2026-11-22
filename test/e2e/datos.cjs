@@ -130,6 +130,9 @@ const check = (name, cond) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`)
   check('the share image still draws when a font fails to load', fallback);
 
   await p5.click('[data-tab=rachas]'); await p5.click('[data-act=share-open]');
+  await p5.waitForTimeout(300);
+  check('the share image hides habit names by default', !(await p5.isChecked('#sharef [name=names]')));
+  check('the share image says its numbers to screen readers', /\d+ días? .*\d+% cumplido/.test(await p5.getAttribute('#sharef .poster', 'aria-label')));
   const [dl] = await Promise.all([p5.waitForEvent('download'), p5.click('[data-act=share-go]')]);
   check('sharing on a computer downloads the PNG', /^habysst-\d{4}\.png$/.test(dl.suggestedFilename()));
   // p4 has no habits
