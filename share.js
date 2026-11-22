@@ -42,8 +42,10 @@ function pattern(ctx, [s, angle, draw]) {
 
 const toneFill = (ctx, t) => (t === 0 ? INK : t === 5 ? HANKO : pattern(ctx, TONES[t]));
 
+// A font that fails to load is skipped: the poster draws with the fallback instead.
 const fonts = () => Promise.race([
-  Promise.all(['Dela Gothic One', 'Zen Kaku Gothic New', 'UnifrakturMaguntia'].map(f => document.fonts.load(`40px "${f}"`))),
+  Promise.all(['40px "Dela Gothic One"', '40px "Zen Kaku Gothic New"', '700 40px "Zen Kaku Gothic New"', '40px "UnifrakturMaguntia"']
+    .map(f => document.fonts.load(f).catch(() => {}))),
   new Promise(r => setTimeout(r, 1500)),
 ]);
 

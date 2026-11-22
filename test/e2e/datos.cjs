@@ -118,6 +118,17 @@ const check = (name, cond) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`)
   check('the share image is 1080×1920 and drawn', poster.w === 1080 && poster.h === 1920 && poster.inked);
   check('the names switch changes the image', poster.differs);
 
+  const fallback = await p5.evaluate(async () => {
+    const { drawPoster } = await import('./share.js'), load = document.fonts.load;
+    document.fonts.load = () => Promise.reject(new Error('x'));
+    try {
+      const c = document.createElement('canvas');
+      await drawPoster(c, { names: true, year: new Date().getFullYear() });
+      return c.width === 1080 && c.getContext('2d').getImageData(0, 0, 1080, 1920).data.some((v, i) => i % 4 === 0 && v < 128);
+    } catch { return false; } finally { document.fonts.load = load; }
+  });
+  check('the share image still draws when a font fails to load', fallback);
+
   check('no script errors', errors.length === 0 || (console.log(errors), false));
   await browser.close(); server.close();
   console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
