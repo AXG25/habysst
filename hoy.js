@@ -178,7 +178,7 @@ export function openEditor(h) {
       <label class="when-weekly field inline">Veces por semana<input type="number" name="times" min="1" max="6" value="${times}" inputmode="numeric"></label>
     </fieldset>
     <fieldset class="reminders"><legend>Recordatorios</legend>
-      <div class="rems">${(h?.reminders ?? []).map(r => reminderRow(r.t, r.d)).join('')}</div>
+      <div class="rems">${(h?.reminders ?? []).map(r => reminderRow(r.t, r.d, r.msg)).join('')}</div>
       <button type="button" class="link" data-add-rem>Añadir recordatorio</button>
       ${blocker() ? `<p class="muted small">${blocker()}</p>` : ''}
     </fieldset>
@@ -205,7 +205,7 @@ export function openEditor(h) {
     if (!name) return;
     const freq = cleanFreq({ type: f.get('ftype'), days: f.getAll('days').map(Number), times: +f.get('times') });
     if (f.get('ftype') !== freq.type) return alert(f.get('ftype') === 'days' ? 'Elige al menos un día.' : 'Las veces por semana van de 1 a 6.');
-    const rows = [...rems.children].map(r => ({ t: r.querySelector('input[type=time]').value, d: [...r.querySelectorAll(':checked')].map(x => +x.value) }));
+    const rows = [...rems.children].map(r => ({ t: r.querySelector('input[type=time]').value, d: [...r.querySelectorAll(':checked')].map(x => +x.value), msg: r.querySelector('input[type=text]').value }));
     if (rows.some(r => !r.t)) return alert('Pon la hora de cada recordatorio.');
     if (rows.some(r => !r.d.length)) return alert('Elige al menos un día para cada recordatorio.');
     const reminders = cleanReminders(rows);
@@ -225,10 +225,11 @@ export function openEditor(h) {
   $sheet.showModal();
 }
 
-const reminderRow = (t, days) => `<div class="rem">
+const reminderRow = (t, days, msg = '') => `<div class="rem">
   <input type="time" value="${t}" aria-label="Hora" required>
   <div class="weekdays" role="group" aria-label="Días del recordatorio">${WD.map((d, i) => `<label><input type="checkbox" value="${i}"${days.includes(i) ? ' checked' : ''}><span>${d}</span></label>`).join('')}</div>
   <button type="button" class="link danger" data-rm>Quitar</button>
+  <label class="field rem-msg">Mensaje (opcional)<input type="text" maxlength="80" value="${esc(msg)}" placeholder="¿Ya leíste tus 20 páginas?" autocomplete="off"></label>
 </div>`;
 
 

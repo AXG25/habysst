@@ -34,17 +34,19 @@ export function minuteOfWeek(ms, tz) {
   return WDAY[p.weekday] * 1440 + +p.hour * 60 + +p.minute;
 }
 
-// Names of the habits with a reminder in the minutes after `from` up to and including `to` (at most WINDOW back).
+// Habits with a reminder in the minutes after `from` up to and including `to` (at most WINDOW back),
+// one per habit: { id, n: name, m: its own message or '' }.
 export function due(items, tz, from, to) {
   const span = Math.min(Math.floor(to / 6e4) - Math.floor(from / 6e4), WINDOW);
   if (span <= 0) return [];
   const now = minuteOfWeek(to, tz);
-  const names = new Set();
+  const out = new Map();
   for (const it of items) {
     const [h, m] = it.t.split(':').map(Number);
-    if (it.d.some(d => (now - (d * 1440 + h * 60 + m) + WEEK) % WEEK < span)) names.add(it.title);
+    const k = it.id || it.title;
+    if (!out.has(k) && it.d.some(d => (now - (d * 1440 + h * 60 + m) + WEEK) % WEEK < span)) out.set(k, { id: it.id || '', n: it.title, m: it.msg || '' });
   }
-  return [...names];
+  return [...out.values()];
 }
 
 // ---- Web Push (RFC 8291 payload encryption, RFC 8292 VAPID)
@@ -103,8 +105,10 @@ export function parseSync(body) {
   for (const it of body.items) {
     const d = Array.isArray(it?.d) ? [...new Set(it.d)].filter(x => Number.isInteger(x) && x >= 0 && x < 7).sort() : [];
     const title = typeof it?.title === 'string' ? it.title.trim().slice(0, 60) : '';
+    const msg = typeof it?.msg === 'string' ? it.msg.trim().slice(0, 80) : '';
+    const id = typeof it?.id === 'string' && /^[\w-]{1,64}$/.test(it.id) ? it.id : '';
     if (!TIME.test(it?.t) || !d.length || !title) return null;
-    items.push({ t: it.t, d, title });
+    items.push({ t: it.t, d, title, msg, id });
   }
   return { endpoint: s.endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth, tz: body.tz, items, test: body.test === true };
 }

@@ -839,4 +839,5 @@ button.motto { padding: 4px 0; text-decoration: underline dotted 1px; text-under
 .rem input[type="time"] { justify-self: start; min-height: 44px; font: inherit; font-weight: 700; padding: 4px 10px; border: 2.5px solid var(--ink); border-radius: 3px; background: var(--paper); color: var(--ink); }
 .rem .weekdays { display: grid; grid-column: 1 / -1; grid-row: 2; }
 .rem [data-rm] { justify-self: end; }
+.rem .rem-msg { grid-column: 1 / -1; margin: 0; }
 .reminders [data-add-rem] { margin-top: 10px; }

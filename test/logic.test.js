@@ -271,10 +271,10 @@ test('constancy: streak in days ending today or yesterday, rate and days of the 
 
 test('reminders: valid times and weekdays only, deduped, sorted, capped', async () => {
   const { cleanReminders, MAX_REMINDERS } = await import('../store.js');
-  assert.deepEqual(cleanReminders([{ t: '21:00', d: [4, 0, 0, 9] }, { t: '07:30', d: [6] }, { t: '21:00', d: [0, 4] }, { t: '24:00', d: [1] }, { t: '08:00', d: [] }, null]),
-    [{ t: '07:30', d: [6] }, { t: '21:00', d: [0, 4] }]);
+  assert.deepEqual(cleanReminders([{ t: '21:00', d: [4, 0, 0, 9] }, { t: '07:30', d: [6], msg: ' Agua ' }, { t: '21:00', d: [0, 4] }, { t: '24:00', d: [1] }, { t: '08:00', d: [] }, null]),
+    [{ t: '07:30', d: [6], msg: 'Agua' }, { t: '21:00', d: [0, 4], msg: '' }]);
   assert.equal(cleanReminders(Array.from({ length: 10 }, (_, i) => ({ t: `0${i}:00`, d: [1] }))).length, MAX_REMINDERS);
   assert.deepEqual(cleanReminders(undefined), []);
-  const s = fromJSON({ version: 1, habits: [{ id: 'a', name: 'Leer', reminders: [{ t: '21:00', d: [0] }] }], done: {} });
-  assert.deepEqual(fromJSON(JSON.parse(JSON.stringify(toJSON(s)))).habits[0].reminders, [{ t: '21:00', d: [0] }]);
+  const s = fromJSON({ version: 1, habits: [{ id: 'a', name: 'Leer', reminders: [{ t: '21:00', d: [0], msg: 'Hoy sí' }] }], done: {} });
+  assert.deepEqual(fromJSON(JSON.parse(JSON.stringify(toJSON(s)))).habits[0].reminders, [{ t: '21:00', d: [0], msg: 'Hoy sí' }]);
 });

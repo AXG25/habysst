@@ -19,7 +19,7 @@ export function blocker() {
   return '';
 }
 
-const items = habits => habits.flatMap(h => (h.reminders ?? []).map(r => ({ t: r.t, d: r.d, title: h.name })));
+const items = habits => habits.flatMap(h => (h.reminders ?? []).map(r => ({ t: r.t, d: r.d, title: h.name, msg: r.msg ?? '', id: h.id })));
 const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 async function post(sub, list, test = false) {

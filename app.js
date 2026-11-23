@@ -1,6 +1,6 @@
 import { starter } from './seed.js';
 import { startTutorial } from './tutorial.js';
-import { save, hasData, loadProblem, recover } from './store.js';
+import { save, hasData, loadProblem, recover, takePending } from './store.js';
 import { $sheet, $view, reduceMotion, ui } from './ui.js';
 import { resetCache, setState, setTab, state, tab } from './core.js';
 import { viewHoy } from './hoy.js';
@@ -54,7 +54,18 @@ document.addEventListener('click', e => {
 });
 
 // Re-render when returning to the app so "today" is correct after midnight.
-document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && !$sheet.open && render());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { applyPending(); if (!$sheet.open) render(); } });
+
+// Check-ins made with a notification's «Hecho» button while the app was closed.
+async function applyPending() {
+  let n = 0;
+  for (const { h, d } of await takePending()) {
+    const set = state.done[h];
+    if (set && /^\d{4}-\d{2}-\d{2}$/.test(d) && !set.has(d)) { set.add(d); n++; }
+  }
+  if (n) { save(state); if (!$sheet.open) render(); }
+}
+navigator.serviceWorker?.addEventListener('message', e => e.data === 'pending' && applyPending());
 
 
 if (ui.theme && ui.theme !== 'system') setTheme(ui.theme);
@@ -77,6 +88,7 @@ if (startProblem) recover().then(s => {
   setState(s);
   save(state);
   render();
+  applyPending();
   alert('Recuperamos tus datos desde la copia interna de este teléfono.');
 });
 
@@ -84,4 +96,5 @@ if (startProblem) recover().then(s => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
 render(true);
+if (!startProblem) applyPending();
 

@@ -36,21 +36,23 @@ test('minute of week follows the phone time zone', () => {
 test('due: fires once in its minute, by weekday, catching up a few late minutes', () => {
   const tz = 'America/Bogota'; // UTC-5, no daylight saving
   const at = (day, h, m) => Date.UTC(2026, 10, day, h + 5, m); // local time in Bogotá, Nov 2026 (23 = Monday)
-  const items = [{ t: '21:00', d: [0, 2], title: 'Leer' }, { t: '07:15', d: [0, 1, 2, 3, 4, 5, 6], title: 'Agua' }, { t: '21:00', d: [0], title: 'Leer' }];
-  assert.deepEqual(due(items, tz, at(23, 20, 59), at(23, 21, 0)), ['Leer']); // deduped
+  const items = [{ t: '21:00', d: [0, 2], title: 'Leer', id: 'a', msg: '¿Ya leíste?' }, { t: '07:15', d: [0, 1, 2, 3, 4, 5, 6], title: 'Agua' }, { t: '21:00', d: [0], title: 'Leer', id: 'a', msg: 'Otro' }];
+  const Leer = [{ id: 'a', n: 'Leer', m: '¿Ya leíste?' }];
+  assert.deepEqual(due(items, tz, at(23, 20, 59), at(23, 21, 0)), Leer); // one per habit
   assert.deepEqual(due(items, tz, at(23, 21, 0), at(23, 21, 1)), []); // already handled
   assert.deepEqual(due(items, tz, at(24, 20, 59), at(24, 21, 0)), []); // Tuesday: not scheduled
-  assert.deepEqual(due(items, tz, at(23, 20, 55), at(23, 21, 3)), ['Leer']); // late cron still sends
+  assert.deepEqual(due(items, tz, at(23, 20, 55), at(23, 21, 3)), Leer); // late cron still sends
   assert.deepEqual(due(items, tz, at(23, 20, 0), at(23, 21, 30)), []); // too late: dropped
-  assert.deepEqual(due(items, tz, at(29, 7, 14), at(29, 7, 15)), ['Agua']); // Sunday
+  assert.deepEqual(due(items, tz, at(29, 7, 14), at(29, 7, 15)), [{ id: '', n: 'Agua', m: '' }]); // Sunday, saved before ids
   assert.deepEqual(due(items, tz, at(22, 23, 59), at(23, 0, 1)), []); // across midnight, nothing due
-  assert.deepEqual(due([{ t: '00:00', d: [0], title: 'X' }], tz, at(22, 23, 59), at(23, 0, 0)), ['X']); // Sunday→Monday
+  assert.deepEqual(due([{ t: '00:00', d: [0], title: 'X' }], tz, at(22, 23, 59), at(23, 0, 0)).map(x => x.n), ['X']); // Sunday→Monday
 });
 
 test('parseSync accepts a real subscription and rejects other URLs and bad items', () => {
   const sub = { endpoint: 'https://web.push.apple.com/abc', keys: { p256dh: Buffer.alloc(65, 4).toString('base64url'), auth: Buffer.alloc(16, 1).toString('base64url') } };
-  const ok = { sub, tz: 'Europe/Madrid', items: [{ t: '09:30', d: [3, 1, 1, 9], title: ' Leer ' }] };
-  assert.deepEqual(parseSync(ok).items, [{ t: '09:30', d: [1, 3], title: 'Leer' }]);
+  const ok = { sub, tz: 'Europe/Madrid', items: [{ t: '09:30', d: [3, 1, 1, 9], title: ' Leer ', msg: ' ¿Ya? ', id: 'h-1' }] };
+  assert.deepEqual(parseSync(ok).items, [{ t: '09:30', d: [1, 3], title: 'Leer', msg: '¿Ya?', id: 'h-1' }]);
+  assert.equal(parseSync({ ...ok, items: [{ ...ok.items[0], id: '<img>' }] }).items[0].id, ''); // ids go into the notification data only if plain
   assert.equal(parseSync({ ...ok, sub: { ...sub, endpoint: 'https://evil.example/push.apple.com' } }), null);
   assert.equal(parseSync({ ...ok, sub: { ...sub, endpoint: 'http://web.push.apple.com/abc' } }), null);
   assert.equal(parseSync({ ...ok, tz: 'Mars/Base' }), null);
