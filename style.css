@@ -832,3 +832,11 @@ button.motto { padding: 4px 0; text-decoration: underline dotted 1px; text-under
 .motto-sheet h2 { font: 400 clamp(1.8rem, 9vw, 2.4rem)/1.1 'UnifrakturMaguntia', 'Old English Text MT', serif; margin-bottom: 10px; }
 .motto-es { margin: 0 0 6px; font-weight: 700; font-size: 1.1rem; }
 .motto-sheet p { margin-top: 0; }
+
+/* Habit reminders */
+.reminders { margin-bottom: 16px; }
+.rem { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1.5px dashed var(--ink); }
+.rem input[type="time"] { justify-self: start; min-height: 44px; font: inherit; font-weight: 700; padding: 4px 10px; border: 2.5px solid var(--ink); border-radius: 3px; background: var(--paper); color: var(--ink); }
+.rem .weekdays { display: grid; grid-column: 1 / -1; grid-row: 2; }
+.rem [data-rm] { justify-self: end; }
+.reminders [data-add-rem] { margin-top: 10px; }

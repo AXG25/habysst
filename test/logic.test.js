@@ -268,3 +268,13 @@ test('constancy: streak in days ending today or yesterday, rate and days of the 
   assert.deepEqual(constancy([], now), { streak: 0, rate: null, days: 0 });
   assert.equal(constancy([{ freq: DAILY, done: set('2025-12-31') }], now).days, 0); // other years don't count
 });
+
+test('reminders: valid times and weekdays only, deduped, sorted, capped', async () => {
+  const { cleanReminders, MAX_REMINDERS } = await import('../store.js');
+  assert.deepEqual(cleanReminders([{ t: '21:00', d: [4, 0, 0, 9] }, { t: '07:30', d: [6] }, { t: '21:00', d: [0, 4] }, { t: '24:00', d: [1] }, { t: '08:00', d: [] }, null]),
+    [{ t: '07:30', d: [6] }, { t: '21:00', d: [0, 4] }]);
+  assert.equal(cleanReminders(Array.from({ length: 10 }, (_, i) => ({ t: `0${i}:00`, d: [1] }))).length, MAX_REMINDERS);
+  assert.deepEqual(cleanReminders(undefined), []);
+  const s = fromJSON({ version: 1, habits: [{ id: 'a', name: 'Leer', reminders: [{ t: '21:00', d: [0] }] }], done: {} });
+  assert.deepEqual(fromJSON(JSON.parse(JSON.stringify(toJSON(s)))).habits[0].reminders, [{ t: '21:00', d: [0] }]);
+});

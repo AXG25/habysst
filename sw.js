@@ -26,3 +26,17 @@ self.addEventListener('fetch', e => {
     return fresh.catch(() => cache.match('./'));
   }));
 });
+
+// Reminders sent by worker/: { habits: ['Leer', ...] }, or { test: true } right after turning them on.
+self.addEventListener('push', e => {
+  let m = {};
+  try { m = e.data?.json() ?? {}; } catch {}
+  const h = m.habits ?? [];
+  const title = m.test ? 'Avisos activados' : h.length === 1 ? h[0] : 'Tus hábitos';
+  const body = m.test ? 'Así te avisaremos a la hora de cada hábito.' : h.length === 1 ? 'Es la hora. Márcalo en HabyssT cuando lo hagas.' : h.join(' · ');
+  e.waitUntil(self.registration.showNotification(title, { body, icon: 'icons/logo-192.png', badge: 'icons/logo-192.png', tag: 'habysst-reminder' }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => list[0]?.focus() ?? clients.openWindow('./')));
+});

@@ -10,6 +10,7 @@ import { viewMetas } from './metas.js';
 import { renderZen } from './enfoque.js';
 import { fillDataStatus, setTheme, viewHabitos } from './ajustes.js';
 import { TABS, go } from './motion.js';
+import { sync } from './avisos.js';
 import { resetCursor } from './progreso.js';
 import { actions as uiActions } from './ui.js';
 import { actions as hoyActions } from './hoy.js';
@@ -28,6 +29,7 @@ const views = { hoy: viewHoy, rachas: () => (calMode === 'mes' ? viewMes() : cal
 export function render(enter = false) {
   resetCache();
   if (tab === 'habitos') queueMicrotask(fillDataStatus);
+  queueMicrotask(() => sync(state.habits)); // no-op unless the reminders changed
   renderZen();
   $view.classList.toggle('enter', enter && !reduceMotion.matches);
   $view.innerHTML = views[tab]();

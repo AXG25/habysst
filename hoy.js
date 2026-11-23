@@ -1,6 +1,7 @@
 import { mottoOf } from './mottos.js';
 import { ymd, parseYmd } from './logic.js';
-import { save, snapshot, cleanFreq, TONES } from './store.js';
+import { save, snapshot, cleanFreq, cleanReminders, MAX_REMINDERS, TONES } from './store.js';
+import { blocker, enable } from './avisos.js';
 import { $sheet, DAYS, MONTHS, TONE_NAMES, WD, cap, esc, fold, header, radio, setUi, stamp, ui } from './ui.js';
 import { dueOn, freqLabel, info, resetCache, setOf, state, unit, weekCount } from './core.js';
 import { glide } from './motion.js';
@@ -176,6 +177,11 @@ export function openEditor(h) {
       <div class="when-days weekdays" role="group" aria-label="Días">${WD.map((d, i) => `<label><input type="checkbox" name="days" value="${i}"${days.includes(i) ? ' checked' : ''}><span>${d}</span></label>`).join('')}</div>
       <label class="when-weekly field inline">Veces por semana<input type="number" name="times" min="1" max="6" value="${times}" inputmode="numeric"></label>
     </fieldset>
+    <fieldset class="reminders"><legend>Recordatorios</legend>
+      <div class="rems">${(h?.reminders ?? []).map(r => reminderRow(r.t, r.d)).join('')}</div>
+      <button type="button" class="link" data-add-rem>Añadir recordatorio</button>
+      ${blocker() ? `<p class="muted small">${blocker()}</p>` : ''}
+    </fieldset>
     <fieldset><legend>Trama</legend><div class="tones">
       ${TONE_NAMES.map((n, i) => `<label><input type="radio" name="tone" value="${i}"${i === tone ? ' checked' : ''}><i class="sw t${i}"></i><span>${n}</span></label>`).join('')}
     </div></fieldset>
@@ -183,26 +189,47 @@ export function openEditor(h) {
     <button type="button" class="btn ghost" data-act="close">Cancelar</button></div>
     ${h ? `<button type="button" class="link danger" data-act="delete" data-h="${h.id}">Borrar hábito</button>` : ''}
   </form>`;
-  $sheet.querySelector('#editor').onsubmit = e => {
+  const form = $sheet.querySelector('#editor'), rems = form.querySelector('.rems'), add = form.querySelector('[data-add-rem]');
+  const fit = () => (add.hidden = rems.children.length >= MAX_REMINDERS);
+  fit();
+  add.onclick = () => {
+    rems.insertAdjacentHTML('beforeend', reminderRow('09:00', fq.type === 'days' ? fq.days : [0, 1, 2, 3, 4, 5, 6]));
+    rems.lastElementChild.querySelector('input').focus();
+    fit();
+  };
+  rems.onclick = e => { if (e.target.closest('[data-rm]')) { e.target.closest('.rem').remove(); fit(); } };
+  form.onsubmit = e => {
     e.preventDefault();
     const f = new FormData(e.target);
     const name = f.get('label').trim();
     if (!name) return;
     const freq = cleanFreq({ type: f.get('ftype'), days: f.getAll('days').map(Number), times: +f.get('times') });
     if (f.get('ftype') !== freq.type) return alert(f.get('ftype') === 'days' ? 'Elige al menos un día.' : 'Las veces por semana van de 1 a 6.');
-    if (h) Object.assign(h, { name, tone: +f.get('tone'), freq });
+    const rows = [...rems.children].map(r => ({ t: r.querySelector('input[type=time]').value, d: [...r.querySelectorAll(':checked')].map(x => +x.value) }));
+    if (rows.some(r => !r.t)) return alert('Pon la hora de cada recordatorio.');
+    if (rows.some(r => !r.d.length)) return alert('Elige al menos un día para cada recordatorio.');
+    const reminders = cleanReminders(rows);
+    if (h) Object.assign(h, { name, tone: +f.get('tone'), freq, reminders });
     else {
       const id = crypto.randomUUID();
-      state.habits.push({ id, name, tone: +f.get('tone'), freq, createdAt: new Date().toISOString() });
+      state.habits.push({ id, name, tone: +f.get('tone'), freq, reminders, createdAt: new Date().toISOString() });
       state.done[id] = new Set();
       navigator.storage?.persist?.(); // asks the browser not to evict our data
     }
     save(state);
     $sheet.close();
     render();
+    // Still inside the tap, so the phone can show its permission prompt.
+    if (reminders.length && !blocker() && Notification.permission === 'default') enable(state.habits).then(msg => msg && alert(msg));
   };
   $sheet.showModal();
 }
+
+const reminderRow = (t, days) => `<div class="rem">
+  <input type="time" value="${t}" aria-label="Hora" required>
+  <div class="weekdays" role="group" aria-label="Días del recordatorio">${WD.map((d, i) => `<label><input type="checkbox" value="${i}"${days.includes(i) ? ' checked' : ''}><span>${d}</span></label>`).join('')}</div>
+  <button type="button" class="link danger" data-rm>Quitar</button>
+</div>`;
 
 
 export const actions = {

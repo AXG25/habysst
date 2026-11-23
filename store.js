@@ -15,6 +15,17 @@ export function cleanFreq(f) {
   return { type: 'daily' };
 }
 
+// A habit's reminders: a time and weekdays (0 = Monday). Duplicates and empty ones are dropped.
+export const MAX_REMINDERS = 6;
+export function cleanReminders(a) {
+  const out = new Map();
+  for (const r of Array.isArray(a) ? a : []) {
+    const d = Array.isArray(r?.d) ? [...new Set(r.d.filter(x => Number.isInteger(x) && x >= 0 && x < 7))].sort() : [];
+    if (typeof r?.t === 'string' && TIME.test(r.t) && d.length) out.set(`${r.t}|${d}`, { t: r.t, d });
+  }
+  return [...out.values()].sort((x, y) => (x.t < y.t ? -1 : 1)).slice(0, MAX_REMINDERS);
+}
+
 const str = (x, max) => (typeof x === 'string' ? x.trim().slice(0, max) : '');
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const date = x => (typeof x === 'string' && DATE.test(x) ? x : null);
@@ -89,6 +100,7 @@ export function fromJSON(obj) {
       tone: Number.isInteger(h.tone) && h.tone >= 0 ? h.tone % TONES : 0,
       createdAt: typeof h.createdAt === 'string' ? h.createdAt : null,
       freq: cleanFreq(h.freq),
+      reminders: cleanReminders(h.reminders),
     }));
   const done = {};
   for (const h of habits) {
