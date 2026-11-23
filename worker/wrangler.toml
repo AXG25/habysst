@@ -8,9 +8,9 @@ crons = ["* * * * *"]
 [vars]
 VAPID_SUBJECT = "https://axg25.github.io/habysst/"
 # VAPID_PUBLIC va aquí (no es secreto); VAPID_PRIVATE se guarda con: npx wrangler secret put VAPID_PRIVATE
-VAPID_PUBLIC = "PEGAR_CLAVE_PUBLICA"
+VAPID_PUBLIC = "BLc8IOxkY3fWDCdA5HC2nFQOL94sMqUEzDXhPeFUOyanSV8YAnUBp7KDUmbsNOe7dKWgVIEKrTMYxGnC3ZT5tfs"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "habysst-push"
-database_id = "PEGAR_ID_DE_LA_BASE"
+database_id = "65ce0210-e4d7-4d6d-be61-cc2ce13a29f2"

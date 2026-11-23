@@ -2,8 +2,8 @@
 // The phone sends the server its reminders whenever they change; the habit data itself stays here.
 
 // Fill in after deploying the worker (README, "Avisos"). Empty: reminders are saved but nothing is sent.
-const API = '';
-const VAPID_PUBLIC = '';
+const API = 'https://habysst-push.habysst.workers.dev';
+const VAPID_PUBLIC = 'BLc8IOxkY3fWDCdA5HC2nFQOL94sMqUEzDXhPeFUOyanSV8YAnUBp7KDUmbsNOe7dKWgVIEKrTMYxGnC3ZT5tfs';
 
 const LAST = 'habysst:push'; // what the server last received from this phone
 
