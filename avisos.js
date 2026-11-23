@@ -19,7 +19,9 @@ export function blocker() {
   return '';
 }
 
-const items = habits => habits.flatMap(h => (h.reminders ?? []).map(r => ({ t: r.t, d: r.d, title: h.name, msg: r.msg ?? '', id: h.id })));
+// a: the notification's button. «Hecho» for done-or-not habits, «+1» for counts, none for minutes.
+const button = h => (!h.goal ? 'done' : h.goal.kind === 'count' ? 'plus' : '');
+const items = habits => habits.flatMap(h => (h.reminders ?? []).map(r => ({ t: r.t, d: r.d, title: h.name, msg: r.msg ?? '', id: h.id, a: button(h) })));
 const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 async function post(sub, list, test = false) {

@@ -26,6 +26,13 @@ export function cleanReminders(a) {
   return [...out.values()].sort((x, y) => (x.t < y.t ? -1 : 1)).slice(0, MAX_REMINDERS);
 }
 
+// What completes a habit's day: null (done or not), a count ("8 vasos") or minutes ("20 min").
+export function cleanGoalOf(g) {
+  if (g?.kind === 'count' && Number.isInteger(g.n) && g.n >= 2 && g.n <= 50) return { kind: 'count', n: g.n, unit: str(g.unit, 16) };
+  if (g?.kind === 'time' && Number.isInteger(g.n) && g.n >= 1 && g.n <= 600) return { kind: 'time', n: g.n };
+  return null;
+}
+
 const str = (x, max) => (typeof x === 'string' ? x.trim().slice(0, max) : '');
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const date = x => (typeof x === 'string' && DATE.test(x) ? x : null);
@@ -86,7 +93,7 @@ export function cleanGoal(g, habitIds) {
   };
 }
 
-const fresh = () => ({ version: 1, habits: [], done: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviewPrompts: {}, reviews: {}, compass: { values: [], vision: '' }, lists: [], metrics: [], values: {}, focus: [], timer: null, demo: null, lastBackup: null });
+const fresh = () => ({ version: 1, habits: [], done: {}, progress: {}, goals: [], journal: {}, prompts: [...DEFAULT_PROMPTS], reviewPrompts: {}, reviews: {}, compass: { values: [], vision: '' }, lists: [], metrics: [], values: {}, focus: [], timer: null, demo: null, lastBackup: null });
 
 // Trust boundary: stored data and imported files both pass through here.
 export function fromJSON(obj) {
@@ -101,11 +108,19 @@ export function fromJSON(obj) {
       createdAt: typeof h.createdAt === 'string' ? h.createdAt : null,
       freq: cleanFreq(h.freq),
       reminders: cleanReminders(h.reminders),
+      goal: cleanGoalOf(h.goal),
     }));
   const done = {};
   for (const h of habits) {
     const arr = obj.done[h.id];
     done[h.id] = new Set(Array.isArray(arr) ? arr.filter(k => typeof k === 'string' && DATE.test(k)) : []);
+  }
+  // Count or minutes per day for habits with a goal; the day itself is in `done` once the goal is met.
+  const progress = {};
+  for (const h of habits) {
+    const src = obj.progress?.[h.id];
+    const days = Object.entries(src && typeof src === 'object' ? src : {}).filter(([k, v]) => DATE.test(k) && Number.isInteger(v) && v > 0 && v <= 9999);
+    if (days.length) progress[h.id] = Object.fromEntries(days);
   }
   const ids = new Set(habits.map(h => h.id));
   const goals = Array.isArray(obj.goals) ? obj.goals.map(g => cleanGoal(g, ids)).filter(Boolean) : [];
@@ -137,10 +152,11 @@ export function fromJSON(obj) {
   const goalIds = new Set(goals.map(g => g.id));
   const iso = x => (typeof x === 'string' && !Number.isNaN(Date.parse(x)) ? x : null);
   const focus = Array.isArray(obj.focus)
-    ? obj.focus.filter(f => iso(f?.start) && num(f.mins) > 0).map(f => ({ start: f.start, mins: Math.min(Math.round(f.mins), 24 * 60), goal: goalIds.has(f.goal) ? f.goal : null }))
+    ? obj.focus.filter(f => iso(f?.start) && num(f.mins) > 0).map(f => ({ start: f.start, mins: Math.min(Math.round(f.mins), 24 * 60), goal: goalIds.has(f.goal) ? f.goal : null, ...(ids.has(f.habit) && { habit: f.habit }) }))
     : [];
   const t = obj.timer;
   const timer = t && iso(t.start) ? { start: t.start, target: num(t.target) > 0 ? t.target : null, goal: goalIds.has(t.goal) ? t.goal : null } : null;
+  if (timer && ids.has(t.habit)) timer.habit = t.habit; // a timer for a habit measured in minutes
   if (timer && ['work', 'break', 'ready'].includes(t.phase) && Number.isInteger(t.pomo) && t.pomo >= 0) Object.assign(timer, { phase: t.phase, pomo: t.pomo });
   const c = obj.compass ?? {};
   const compass = { values: (Array.isArray(c.values) ? c.values : []).map(v => str(v, 40)).filter(Boolean).slice(0, 5), vision: str(c.vision, 1000) };
@@ -158,7 +174,7 @@ export function fromJSON(obj) {
   const demo = dm && typeof dm === 'object'
     ? { done: byId(dm.done), journal: dates(dm.journal), values: byId(dm.values), focus: (Array.isArray(dm.focus) ? dm.focus : []).filter(iso) }
     : null;
-  return { version: 1, habits, done, goals, journal, prompts, reviewPrompts, reviews, compass, lists, metrics, values, focus, timer, demo, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
+  return { version: 1, habits, done, progress, goals, journal, prompts, reviewPrompts, reviews, compass, lists, metrics, values, focus, timer, demo, lastBackup: typeof obj.lastBackup === 'string' ? obj.lastBackup : null };
 }
 
 export const toJSON = s => ({
@@ -177,6 +193,7 @@ export const toJSON = s => ({
   demo: s.demo,
   timer: s.timer,
   done: Object.fromEntries(s.habits.map(h => [h.id, [...(s.done[h.id] ?? [])].sort()])),
+  progress: Object.fromEntries(s.habits.filter(h => s.progress?.[h.id]).map(h => [h.id, s.progress[h.id]])),
   lastBackup: s.lastBackup,
 });
 

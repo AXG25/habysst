@@ -1,7 +1,7 @@
-import { advancePomodoro } from './logic.js';
+import { advancePomodoro, ymd } from './logic.js';
 import { save } from './store.js';
 import { $sheet, dur, esc, plural, radio } from './ui.js';
-import { activeGoals, focusOn, state } from './core.js';
+import { activeGoals, focusOn, progressOf, setProgress, state } from './core.js';
 import { render } from './app.js';
 
 // ---- Focus sessions. The running timer lives in state, so it survives closing the app.
@@ -16,15 +16,18 @@ export function focusBox(key) {
     return `<section class="focusbox idle"><button class="btn ghost wide" data-act="focus-setup">Empezar sesión de enfoque</button>
       ${today ? `<span class="hmeta">Hoy: ${dur(today)} de enfoque</span>` : ''}</section>`;
   }
-  const goal = state.goals.find(g => g.id === t.goal);
+  const goal = forWhat(t);
   return `<section class="focusbox running panel" aria-live="off">
     <span class="hmeta" id="clocklabel">${phaseLabel()}</span>
     <span class="clock" id="clock">${clockText()}</span>
-    ${goal ? `<span class="hmeta">Para: ${esc(goal.title)}</span>` : ''}
+    ${goal ? `<span class="hmeta">Para: ${esc(goal)}</span>` : ''}
     <div class="row">${focusButtons()}<button class="btn ghost" data-act="zen" aria-label="Modo zen">Zen</button></div>
   </section>`;
 }
 
+
+// The goal or habit a session counts for, as text.
+const forWhat = t => state.goals.find(g => g.id === t.goal)?.title ?? state.habits.find(h => h.id === t.habit)?.name ?? '';
 
 export const isPomo = t => t?.phase !== undefined;
 
@@ -105,7 +108,7 @@ export function renderZen() {
   document.body.classList.toggle('zen-on', show);
   keepAwake(show);
   if (!show) return;
-  const t = state.timer, goal = state.goals.find(g => g.id === t.goal);
+  const t = state.timer, goal = forWhat(t);
   const wasOpen = $zen.contains(document.activeElement);
   $zen.className = `zen ${t.phase ?? 'work'}`;
   $zen.innerHTML = `<p class="zen-phase">${phaseLabel()}</p>
@@ -114,7 +117,7 @@ export function renderZen() {
       <span class="brand" aria-hidden="true">HabyssT</span>
       <span class="zen-clock" id="zclock">${clockText()}</span>
     </div>
-    ${goal ? `<p class="zen-goal">${esc(goal.title)}</p>` : ''}
+    ${goal ? `<p class="zen-goal">${esc(goal)}</p>` : ''}
     <div class="row">${focusButtons()}<button class="btn ghost" data-act="zen-exit">Salir</button></div>`;
   if (!wasOpen) $zen.querySelector('[data-act="zen-exit"]').focus({ preventScroll: true }); // keep keyboard focus inside the overlay
 }
@@ -150,12 +153,26 @@ export function openFocusSetup() {
 }
 
 
+// A timer for a habit measured in minutes, set to what is left of today's goal.
+export function startHabitTimer(h) {
+  if (!h?.goal || state.timer) return;
+  const left = h.goal.n - progressOf(h, ymd(new Date()));
+  state.timer = { start: new Date().toISOString(), target: left > 0 ? left : h.goal.n, goal: null, habit: h.id };
+  buzzed = false;
+  save(state);
+  render();
+}
+
 export function stopFocus(keep) {
   if (isPomo(state.timer) && state.timer.phase !== 'work') { state.timer = null; zenOpen = false; save(state); return render(); }
   const t = state.timer, mins = Math.round((Date.now() - Date.parse(t.start)) / 60000);
   if (!keep && mins >= 1 && !confirm(`¿Descartar esta sesión de ${dur(mins)}? No se guardará.`)) return;
   if (keep && mins < 1) alert('Las sesiones de menos de un minuto no se guardan.');
-  if (keep && mins >= 1) state.focus.push({ start: t.start, mins, goal: t.goal });
+  if (keep && mins >= 1) {
+    state.focus.push({ start: t.start, mins, goal: t.goal, ...(t.habit && { habit: t.habit }) });
+    const h = state.habits.find(x => x.id === t.habit), day = ymd(new Date(t.start));
+    if (h?.goal) setProgress(h, day, progressOf(h, day) + mins); // the minutes count for the habit's day
+  }
   state.timer = null;
   zenOpen = false;
   save(state);

@@ -35,7 +35,7 @@ export function minuteOfWeek(ms, tz) {
 }
 
 // Habits with a reminder in the minutes after `from` up to and including `to` (at most WINDOW back),
-// one per habit: { id, n: name, m: its own message or '' }.
+// one per habit: { id, n: name, m: its own message or '', a: its button ('done', 'plus' or '') }.
 export function due(items, tz, from, to) {
   const span = Math.min(Math.floor(to / 6e4) - Math.floor(from / 6e4), WINDOW);
   if (span <= 0) return [];
@@ -44,7 +44,7 @@ export function due(items, tz, from, to) {
   for (const it of items) {
     const [h, m] = it.t.split(':').map(Number);
     const k = it.id || it.title;
-    if (!out.has(k) && it.d.some(d => (now - (d * 1440 + h * 60 + m) + WEEK) % WEEK < span)) out.set(k, { id: it.id || '', n: it.title, m: it.msg || '' });
+    if (!out.has(k) && it.d.some(d => (now - (d * 1440 + h * 60 + m) + WEEK) % WEEK < span)) out.set(k, { id: it.id || '', n: it.title, m: it.msg || '', a: it.a ?? 'done' });
   }
   return [...out.values()];
 }
@@ -108,7 +108,8 @@ export function parseSync(body) {
     const msg = typeof it?.msg === 'string' ? it.msg.trim().slice(0, 80) : '';
     const id = typeof it?.id === 'string' && /^[\w-]{1,64}$/.test(it.id) ? it.id : '';
     if (!TIME.test(it?.t) || !d.length || !title) return null;
-    items.push({ t: it.t, d, title, msg, id });
+    const a = ['done', 'plus', ''].includes(it?.a) ? it.a : 'done';
+    items.push({ t: it.t, d, title, msg, id, a });
   }
   return { endpoint: s.endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth, tz: body.tz, items, test: body.test === true };
 }

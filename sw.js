@@ -27,22 +27,22 @@ self.addEventListener('fetch', e => {
   }));
 });
 
-// Reminders sent by worker/: { habits: [{ id, n: name, m: message }] }, or { test: true } right after turning them on.
+// Reminders sent by worker/: { habits: [{ id, n: name, m: message, a: 'done' | 'plus' | '' }] }, or { test: true } right after turning them on.
 // One notification per habit, so each gets its own «Hecho» button (Android; iPhone shows no buttons).
 self.addEventListener('push', e => {
   let m = {};
   try { m = e.data?.json() ?? {}; } catch {}
-  const show = (title, body, id = '') => self.registration.showNotification(title, {
+  const show = (title, body, id = '', a = '') => self.registration.showNotification(title, {
     body, icon: 'icons/logo-192.png', badge: 'icons/badge-96.png', tag: `habysst-${id || title}`, data: { id },
-    actions: id ? [{ action: 'done', title: 'Hecho' }] : [],
+    actions: id && a ? [{ action: a, title: a === 'plus' ? '+1' : 'Hecho' }] : [],
   });
   const list = m.test ? [] : (m.habits ?? []).filter(h => h && typeof h.n === 'string');
   e.waitUntil(m.test || !list.length
     ? show('Avisos activados', 'Así te avisaremos a la hora de cada hábito.')
-    : Promise.all(list.map(h => show(h.n, h.m || 'Es la hora. Márcalo en HabyssT cuando lo hagas.', h.id))));
+    : Promise.all(list.map(h => show(h.n, h.m || 'Es la hora. Márcalo en HabyssT cuando lo hagas.', h.id, h.a ?? 'done'))));
 });
 
-// «Hecho» is queued in the app's IndexedDB (store.js takePending) and applied the next time the app opens.
+// «Hecho» and «+1» are queued in the app's IndexedDB (store.js takePending) and applied the next time the app opens.
 const idb = fn => new Promise((res, rej) => {
   const r = indexedDB.open('habysst', 1);
   r.onupgradeneeded = () => r.result.createObjectStore('kv');
@@ -54,14 +54,14 @@ const idb = fn => new Promise((res, rej) => {
     tx.onerror = () => rej(tx.error);
   };
 });
-const markDone = id => idb(store => {
+const markDone = (id, a) => idb(store => {
   const get = store.get('pending');
-  get.onsuccess = () => store.put([...(get.result ?? []), { h: id, d: new Date().toLocaleDateString('sv') }], 'pending');
+  get.onsuccess = () => store.put([...(get.result ?? []), { h: id, d: new Date().toLocaleDateString('sv'), a }], 'pending');
 });
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const id = e.notification.data?.id;
-  if (e.action === 'done' && id) return e.waitUntil(markDone(id).then(() => clients.matchAll({ type: 'window' })).then(list => list.forEach(c => c.postMessage('pending'))));
+  if ((e.action === 'done' || e.action === 'plus') && id) return e.waitUntil(markDone(id, e.action).then(() => clients.matchAll({ type: 'window' })).then(list => list.forEach(c => c.postMessage('pending'))));
   e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => list[0]?.focus() ?? clients.openWindow('./')));
 });

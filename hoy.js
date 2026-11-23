@@ -1,13 +1,13 @@
 import { mottoOf } from './mottos.js';
 import { ymd, parseYmd } from './logic.js';
-import { save, snapshot, cleanFreq, cleanReminders, MAX_REMINDERS, TONES } from './store.js';
+import { save, snapshot, cleanFreq, cleanGoalOf, cleanReminders, MAX_REMINDERS, TONES } from './store.js';
 import { blocker, enable } from './avisos.js';
 import { $sheet, DAYS, MONTHS, TONE_NAMES, WD, cap, esc, fold, header, radio, setUi, stamp, ui } from './ui.js';
-import { dueOn, freqLabel, info, resetCache, setOf, state, unit, weekCount } from './core.js';
+import { dueOn, freqLabel, goalText, info, progressOf, refitProgress, resetCache, setOf, setProgress, state, unit, weekCount } from './core.js';
 import { glide } from './motion.js';
 import { checkIn, metricRows, scales, sleepLine } from './registro.js';
 import { reviewNotice } from './revisiones.js';
-import { focusBox } from './enfoque.js';
+import { focusBox, startHabitTimer } from './enfoque.js';
 import { render } from './app.js';
 
 export let editMode = null; // 'habits' | 'metrics' while editing from Hoy
@@ -117,12 +117,15 @@ export function viewHoy() {
     const on = setOf(h).has(key);
     const { cur, best } = info(h);
     const weekly = h.freq.type === 'weekly';
-    return `<li style="--r:${i}"><button class="habit panel${on ? ' on' : ''}" data-act="toggle" data-h="${h.id}" data-d="${key}" aria-pressed="${on}">
-      <span class="check" aria-hidden="true"></span>
+    const g = h.goal, v = g ? progressOf(h, key) : 0;
+    // Count: each tap adds one. Minutes: opens a sheet to add them by hand or with the focus timer.
+    const act = !g ? 'toggle' : g.kind === 'count' ? 'plus' : 'habit-time';
+    return `<li style="--r:${i}"${g ? ` class="counted"` : ''}><button class="habit panel${on ? ' on' : ''}" data-act="${act}" data-h="${h.id}" data-d="${key}"${g ? ` aria-label="${esc(h.name)}: ${goalText(h, key)}${g.kind === 'count' ? '. Toca para sumar uno' : ''}"` : ` aria-pressed="${on}"`}>
+      <span class="check" aria-hidden="true">${g && !on ? `<b class="count">${v}</b>` : ''}</span>
       <span class="hname">${esc(h.name)}</span>
-      <span class="hmeta">${weekly ? `Semana ${weekCount(h, now)}/${h.freq.times}. Racha ${cur} sem., mejor ${best}` : `Racha ${unit(h, cur)}, mejor ${best}`}</span>
+      <span class="hmeta">${g ? `${goalText(h, key)}. ` : ''}${weekly ? `Semana ${weekCount(h, now)}/${h.freq.times}. Racha ${cur} sem., mejor ${best}` : `Racha ${unit(h, cur)}, mejor ${best}`}</span>
       <i class="sw dot t${h.tone}" aria-hidden="true"></i>
-    </button></li>`;
+    </button>${g?.kind === 'count' && v ? `<button class="minus" data-act="step" data-h="${h.id}" data-d="${key}" data-v="-1" aria-label="Quitar uno a ${esc(h.name)}">−</button>` : ''}</li>`;
   };
   return top + backupNote(now) + fold('habits', 'Hábitos', `${doneToday} de ${due.length} hechos`, secActions('habits'), `
     <ul class="habits">${due.map(item).join('')}</ul>
@@ -149,6 +152,7 @@ export function openDay(key) {
       <h2>${d.getDate()} de ${MONTHS[d.getMonth()]}</h2>
       <ul class="habits">${state.habits.map(h => {
         const on = setOf(h).has(key);
+        if (h.goal) return `<li>${stepper(h, key)}</li>`;
         return `<li><button type="button" class="habit compact panel${on ? ' on' : ''}" data-act="toggle" data-h="${h.id}" data-d="${key}" aria-pressed="${on}">
           <span class="check" aria-hidden="true"></span><span class="hname">${esc(h.name)}</span></button></li>`;
       }).join('')}</ul>
@@ -176,6 +180,12 @@ export function openEditor(h) {
       <div class="opts">${radio('ftype', 'daily', 'Diario', fq.type === 'daily')}${radio('ftype', 'days', 'Días concretos', fq.type === 'days')}${radio('ftype', 'weekly', 'Veces por semana', fq.type === 'weekly')}</div>
       <div class="when-days weekdays" role="group" aria-label="Días">${WD.map((d, i) => `<label><input type="checkbox" name="days" value="${i}"${days.includes(i) ? ' checked' : ''}><span>${d}</span></label>`).join('')}</div>
       <label class="when-weekly field inline">Veces por semana<input type="number" name="times" min="1" max="6" value="${times}" inputmode="numeric"></label>
+    </fieldset>
+    <fieldset class="freq goalf"><legend>Meta de cada día</legend>
+      <div class="opts">${radio('gkind', '', 'Hecho o no hecho', !h?.goal)}${radio('gkind', 'count', 'Varias veces', h?.goal?.kind === 'count')}${radio('gkind', 'time', 'Por tiempo', h?.goal?.kind === 'time')}</div>
+      <div class="when-count"><label class="field inline">Veces al día<input type="number" name="gcount" min="2" max="50" value="${h?.goal?.kind === 'count' ? h.goal.n : 3}" inputmode="numeric"></label>
+        <label class="field">Unidad (opcional)<input name="gunit" maxlength="16" value="${esc(h?.goal?.unit ?? '')}" placeholder="vasos" autocomplete="off"></label></div>
+      <label class="when-time field inline">Minutos al día<input type="number" name="gmins" min="1" max="600" value="${h?.goal?.kind === 'time' ? h.goal.n : 20}" inputmode="numeric"></label>
     </fieldset>
     <fieldset class="reminders"><legend>Recordatorios</legend>
       <div class="rems">${(h?.reminders ?? []).map(r => reminderRow(r.t, r.d, r.msg)).join('')}</div>
@@ -209,10 +219,13 @@ export function openEditor(h) {
     if (rows.some(r => !r.t)) return alert('Pon la hora de cada recordatorio.');
     if (rows.some(r => !r.d.length)) return alert('Elige al menos un día para cada recordatorio.');
     const reminders = cleanReminders(rows);
-    if (h) Object.assign(h, { name, tone: +f.get('tone'), freq, reminders });
+    const gkind = f.get('gkind');
+    const goal = cleanGoalOf({ kind: gkind, n: +f.get(gkind === 'time' ? 'gmins' : 'gcount'), unit: f.get('gunit') });
+    if (gkind && !goal) return alert(gkind === 'time' ? 'Los minutos al día van de 1 a 600.' : 'Las veces al día van de 2 a 50.');
+    if (h) { Object.assign(h, { name, tone: +f.get('tone'), freq, reminders, goal }); refitProgress(h); }
     else {
       const id = crypto.randomUUID();
-      state.habits.push({ id, name, tone: +f.get('tone'), freq, reminders, createdAt: new Date().toISOString() });
+      state.habits.push({ id, name, tone: +f.get('tone'), freq, reminders, goal, createdAt: new Date().toISOString() });
       state.done[id] = new Set();
       navigator.storage?.persist?.(); // asks the browser not to evict our data
     }
@@ -225,6 +238,43 @@ export function openEditor(h) {
   $sheet.showModal();
 }
 
+// − value + for a habit with a goal: one at a time for counts, 5 minutes for time.
+const stepper = (h, key) => {
+  const step = h.goal.kind === 'time' ? 5 : 1, v = progressOf(h, key), on = setOf(h).has(key);
+  return `<div class="habit compact panel stepper${on ? ' on' : ''}"><span class="check" aria-hidden="true"></span><span class="hname">${esc(h.name)}</span>
+    <span class="steps"><button type="button" data-act="step" data-h="${h.id}" data-d="${key}" data-v="${-step}" aria-label="Quitar ${step === 1 ? 'uno' : `${step} minutos`}"${v ? '' : ' disabled'}>−</button>
+    <b>${goalText(h, key)}</b>
+    <button type="button" data-act="step" data-h="${h.id}" data-d="${key}" data-v="${step}" aria-label="Sumar ${step === 1 ? 'uno' : `${step} minutos`}">+</button></span></div>`;
+};
+
+// Minutes for a habit measured in time: typed by hand or counted by the focus timer.
+function openTimeSheet(h, key) {
+  const draw = () => {
+    const v = progressOf(h, key), left = Math.max(h.goal.n - v, 0);
+    $sheet.innerHTML = `<form id="timef">
+      <h2 tabindex="-1" autofocus>${esc(h.name)}</h2>
+      ${stepper(h, key)}
+      <label class="field inline">Minutos que hiciste<input type="number" name="mins" min="1" max="600" inputmode="numeric" placeholder="${left || 10}"></label>
+      <div class="row"><button class="btn">Sumar</button>
+      ${state.timer ? '' : `<button type="button" class="btn ghost" data-act="habit-timer" data-h="${h.id}">Temporizador de ${left || h.goal.n} min</button>`}</div>
+      ${state.timer ? '<p class="muted small">Ya hay una sesión de enfoque en marcha.</p>' : ''}
+      <button type="button" class="link" data-act="close">Cerrar</button>
+    </form>`;
+    $sheet.querySelector('#timef').onsubmit = e => {
+      e.preventDefault();
+      const mins = +new FormData(e.target).get('mins');
+      if (!Number.isInteger(mins) || mins < 1 || mins > 600) return alert('Escribe los minutos, de 1 a 600.');
+      setProgress(h, key, v + mins);
+      save(state);
+      $sheet.close();
+      render();
+    };
+  };
+  $sheet.redraw = draw;
+  draw();
+  $sheet.showModal();
+}
+
 const reminderRow = (t, days, msg = '') => `<div class="rem">
   <input type="time" value="${t}" aria-label="Hora" required>
   <div class="weekdays" role="group" aria-label="Días del recordatorio">${WD.map((d, i) => `<label><input type="checkbox" value="${i}"${days.includes(i) ? ' checked' : ''}><span>${d}</span></label>`).join('')}</div>
@@ -232,6 +282,23 @@ const reminderRow = (t, days, msg = '') => `<div class="rem">
   <label class="field rem-msg">Mensaje (opcional)<input type="text" maxlength="80" value="${esc(msg)}" placeholder="¿Ya leíste tus 20 páginas?" autocomplete="off"></label>
 </div>`;
 
+
+// A check-in from Hoy or the day sheet: `change` updates the data, then the list glides to its new order.
+function mark(el, change) {
+  const { h, d } = el.dataset;
+  glide('#view .habits .habit[data-d]', 'h', () => {
+    change();
+    resetCache();
+    save(state);
+    if ($sheet.open && $sheet.redraw) $sheet.redraw();
+    render();
+  });
+  // Animate only the check-in that changed, not the whole list.
+  document.querySelectorAll(`.habit[data-h="${h}"][data-d="${d}"]`).forEach(b => b.classList.add('pop'));
+  // Closing the last habit due today is worth a mark, once.
+  const now = new Date(), due = state.habits.filter(x => dueOn(x, now));
+  if (d === ymd(now) && setOf({ id: h }).has(d) && due.some(x => x.id === h) && due.every(x => setOf(x).has(d))) stamp('Día completo');
+}
 
 export const actions = {
   'motto': () => {
@@ -246,19 +313,11 @@ export const actions = {
     </form>`;
     $sheet.showModal();
   },
-  'toggle': (el, e) => { const { h, d } = el.dataset;
-    glide('#view .habits [data-act="toggle"]', 'h', () => {
-      toggle(h, d);
-      if ($sheet.open && $sheet.redraw) $sheet.redraw();
-      render();
-    });
-    // Animate only the check-in that changed, not the whole list.
-    document.querySelectorAll(`[data-act="toggle"][data-h="${h}"][data-d="${d}"]`).forEach(b => b.classList.add('pop'));
-    // Closing the last habit due today is worth a mark, once.
-    const now = new Date(), due = state.habits.filter(x => dueOn(x, now));
-    if (d === ymd(now) && setOf({ id: h }).has(d) && due.some(x => x.id === h) && due.every(x => setOf(x).has(d))) stamp('Día completo');
-    return;
-  },
+  'toggle': (el, e) => mark(el, () => toggle(el.dataset.h, el.dataset.d)),
+  'plus': (el, e) => mark(el, () => { const h = state.habits.find(x => x.id === el.dataset.h); setProgress(h, el.dataset.d, progressOf(h, el.dataset.d) + 1); }),
+  'step': (el, e) => mark(el, () => { const h = state.habits.find(x => x.id === el.dataset.h); setProgress(h, el.dataset.d, progressOf(h, el.dataset.d) + +el.dataset.v); }),
+  'habit-time': (el, e) => openTimeSheet(state.habits.find(x => x.id === el.dataset.h), el.dataset.d),
+  'habit-timer': (el, e) => { $sheet.close(); startHabitTimer(state.habits.find(x => x.id === el.dataset.h)); },
   'day': (el, e) => { const { h, d } = el.dataset;
     return openDay(d);
   },
@@ -279,6 +338,7 @@ export const actions = {
     snapshot(state, `Antes de borrar el hábito «${habit.name}»`);
     state.habits = state.habits.filter(x => x.id !== h);
     delete state.done[h];
+    delete state.progress[h];
     state.goals.forEach(g => (g.habits = g.habits.filter(x => x !== h)));
     save(state);
     $sheet.close();

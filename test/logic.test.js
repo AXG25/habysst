@@ -278,3 +278,19 @@ test('reminders: valid times and weekdays only, deduped, sorted, capped', async 
   const s = fromJSON({ version: 1, habits: [{ id: 'a', name: 'Leer', reminders: [{ t: '21:00', d: [0], msg: 'Hoy sí' }] }], done: {} });
   assert.deepEqual(fromJSON(JSON.parse(JSON.stringify(toJSON(s)))).habits[0].reminders, [{ t: '21:00', d: [0], msg: 'Hoy sí' }]);
 });
+
+test('daily goals: counts and minutes are validated, progress survives a backup', async () => {
+  const { cleanGoalOf } = await import('../store.js');
+  assert.deepEqual(cleanGoalOf({ kind: 'count', n: 8, unit: ' vasos ' }), { kind: 'count', n: 8, unit: 'vasos' });
+  assert.deepEqual(cleanGoalOf({ kind: 'time', n: 20, unit: 'x' }), { kind: 'time', n: 20 });
+  assert.equal(cleanGoalOf({ kind: 'count', n: 1 }), null); // one a day is a plain habit
+  assert.equal(cleanGoalOf({ kind: 'time', n: 0 }), null);
+  assert.equal(cleanGoalOf(undefined), null);
+  const s = fromJSON({ version: 1, habits: [{ id: 'a', name: 'Agua', goal: { kind: 'count', n: 8 } }, { id: 'b', name: 'X' }], done: {},
+    progress: { a: { '2026-11-23': 5, '2026-11-24': -1, bad: 3 }, gone: { '2026-11-23': 2 } } });
+  assert.deepEqual(s.progress, { a: { '2026-11-23': 5 } });
+  assert.deepEqual(fromJSON(JSON.parse(JSON.stringify(toJSON(s)))).progress, { a: { '2026-11-23': 5 } });
+  const t = fromJSON({ version: 1, habits: [{ id: 'a', name: 'Leer' }], done: {}, timer: { start: '2026-11-23T10:00:00Z', habit: 'a' }, focus: [{ start: '2026-11-23T10:00:00Z', mins: 20, habit: 'a' }, { start: '2026-11-23T11:00:00Z', mins: 5, habit: 'zz' }] });
+  assert.equal(t.timer.habit, 'a');
+  assert.deepEqual(t.focus.map(f => f.habit), ['a', undefined]);
+});

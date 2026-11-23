@@ -2,7 +2,7 @@ import { starter } from './seed.js';
 import { startTutorial } from './tutorial.js';
 import { save, hasData, loadProblem, recover, takePending } from './store.js';
 import { $sheet, $view, reduceMotion, ui } from './ui.js';
-import { resetCache, setState, setTab, state, tab } from './core.js';
+import { progressOf, resetCache, setOf, setProgress, setState, setTab, state, tab } from './core.js';
 import { viewHoy } from './hoy.js';
 import { calMode, viewAnalisis, viewAno, viewMes } from './progreso.js';
 import { viewDiario } from './registro.js';
@@ -59,11 +59,16 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 // Check-ins made with a notification's «Hecho» button while the app was closed.
 async function applyPending() {
   let n = 0;
-  for (const { h, d } of await takePending()) {
-    const set = state.done[h];
-    if (set && /^\d{4}-\d{2}-\d{2}$/.test(d) && !set.has(d)) { set.add(d); n++; }
+  for (const { h: id, d, a } of await takePending()) {
+    const h = state.habits.find(x => x.id === id);
+    if (!h || !/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    if (a === 'plus' && h.goal) setProgress(h, d, progressOf(h, d) + 1);
+    else if (setOf(h).has(d)) continue;
+    else if (h.goal) setProgress(h, d, Math.max(progressOf(h, d), h.goal.n));
+    else setOf(h).add(d);
+    n++;
   }
-  if (n) { save(state); if (!$sheet.open) render(); }
+  if (n) { resetCache(); save(state); if (!$sheet.open) render(); }
 }
 navigator.serviceWorker?.addEventListener('message', e => e.data === 'pending' && applyPending());
 

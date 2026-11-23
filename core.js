@@ -24,6 +24,26 @@ export const unit = (h, n) => (h.freq.type === 'weekly' ? plural(n, 'semana', 's
 export const freqLabel = f =>
   f.type === 'days' ? f.days.map(i => WD[i]).join(' ') : f.type === 'weekly' ? `${f.times} ${f.times === 1 ? 'vez' : 'veces'} por semana` : 'Diario';
 
+// ---- Habits with a daily goal: a count or minutes. The day joins `done` once the goal is met.
+export const progressOf = (h, key) => state.progress[h.id]?.[key] ?? 0;
+
+export function setProgress(h, key, v) {
+  if (!h?.goal) return;
+  v = Math.max(0, Math.min(Math.round(v), 9999));
+  const p = (state.progress[h.id] ??= {});
+  if (v) p[key] = v; else delete p[key];
+  if (!Object.keys(p).length) delete state.progress[h.id];
+  v >= h.goal.n ? setOf(h).add(key) : setOf(h).delete(key);
+}
+
+// After a goal changes, days already measured follow the new goal; days marked without a count stay as they were.
+export const refitProgress = h => { if (h.goal) for (const [k, v] of Object.entries(state.progress[h.id] ?? {})) setProgress(h, k, v); };
+
+export const goalText = (h, key) => {
+  const v = progressOf(h, key), g = h.goal;
+  return g.kind === 'time' ? `${v}/${g.n} min` : `${v}/${g.n}${g.unit ? ` ${g.unit}` : ''}`;
+};
+
 export const dueOn = (h, d) => h.freq.type !== 'days' || h.freq.days.includes(weekdayIdx(d));
 
 export function weekCount(h, d) {
