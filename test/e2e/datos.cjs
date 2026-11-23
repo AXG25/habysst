@@ -139,6 +139,20 @@ const check = (name, cond) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}`)
   await p4.click('[data-tab=rachas]');
   check('no share button without habits', !(await p4.$('[data-act=share-open]')));
 
+  // Reorder habits from Hoy's edit mode; the order must survive a reload.
+  const order = () => p5.evaluate(() => JSON.parse(localStorage.getItem('habysst')).habits.map(h => h.id));
+  await p5.click('[data-tab=hoy]'); await p5.waitForTimeout(300);
+  await p5.click('[data-act=editmode][data-k=habits]'); await p5.waitForTimeout(300);
+  const was = await order();
+  await p5.focus('.sortable:nth-child(2) .grip'); await p5.keyboard.press('ArrowUp'); await p5.waitForTimeout(300);
+  const g = await (await p5.$('.sortable:nth-child(3) .grip')).boundingBox();
+  const step = await p5.evaluate(() => { const r = document.querySelectorAll('.sortable'); return r[1].getBoundingClientRect().top - r[0].getBoundingClientRect().top; });
+  await p5.mouse.move(g.x + 20, g.y + 20); await p5.mouse.down();
+  for (let i = 1; i <= 8; i++) await p5.mouse.move(g.x + 20, g.y + 20 - (step * 2.5 * i) / 8);
+  await p5.mouse.up(); await p5.waitForTimeout(600);
+  await p5.reload(); await p5.waitForTimeout(300);
+  check('habits keep the order they were dragged into', JSON.stringify(await order()) === JSON.stringify([was[2], was[1], was[0], ...was.slice(3)]));
+
   check('no script errors', errors.length === 0 || (console.log(errors), false));
   await browser.close(); server.close();
   console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

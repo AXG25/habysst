@@ -628,6 +628,18 @@ body.zen-on { overflow: hidden; }
 
 
 h2.sub-sm, .sub-sm { margin: 18px 0 8px; font-size: 1rem; }
+/* Reorder in edit mode: a grip to drag (or arrow keys), neighbours slide aside */
+.sortable { display: flex; align-items: stretch; gap: 6px; transition: transform 200ms var(--ease-out); }
+.sortable > .habit { flex: 1; min-width: 0; }
+.grip {
+  flex: none; width: 44px; display: grid; place-items: center; touch-action: none; cursor: grab;
+}
+/* Six ink dots: the usual "drag me" mark */
+.grip::before { content: ''; width: 16px; height: 24px; background: radial-gradient(circle, var(--ink) 1.8px, transparent 2.2px) 0 0 / 8px 8px; }
+.sortable.lifted { transition: none; z-index: 3; position: relative; }
+.sortable.lifted > .habit { box-shadow: 0 10px 24px rgb(0 0 0 / 0.18); }
+.sortable.lifted .grip { cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) { .sortable { transition: none; } }
 .habit.editing { grid-template-columns: 36px 1fr auto; }
 .habit.editing .sw { grid-row: 1 / 3; }
 .habit.editing .link { grid-column: 3; grid-row: 1 / 3; font-weight: 700; }

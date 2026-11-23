@@ -11,6 +11,71 @@ import { render } from './app.js';
 
 export let editMode = null; // 'habits' | 'metrics' while editing from Hoy
 
+function backupNote(now) {
+  const daysSince = state.lastBackup ? Math.floor((now - new Date(state.lastBackup)) / 864e5) : null;
+  return daysSince === null || daysSince >= 7
+    ? `<button class="note" data-act="export">${daysSince === null ? 'Aún no tienes respaldo.' : `Último respaldo hace ${daysSince} días.`} Exportar ahora</button>`
+    : '';
+}
+
+// Reorder habits: the order of state.habits is the order everywhere, and it is saved with the data.
+function moveHabit(id, to) {
+  const from = state.habits.findIndex(h => h.id === id);
+  if (from < 0 || to < 0 || to >= state.habits.length || to === from) return false;
+  state.habits.splice(to, 0, ...state.habits.splice(from, 1));
+  save(state);
+  return true;
+}
+
+document.addEventListener('keydown', e => {
+  const g = e.target.closest?.('.grip');
+  if (!g || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+  e.preventDefault();
+  const id = g.dataset.h;
+  if (moveHabit(id, state.habits.findIndex(h => h.id === id) + (e.key === 'ArrowUp' ? -1 : 1))) {
+    render();
+    document.querySelector(`.grip[data-h="${id}"]`)?.focus();
+  }
+});
+
+// Drag by the handle: the row follows the finger, its neighbours slide out of the way, and the drop saves.
+let drag = null;
+document.addEventListener('pointerdown', e => {
+  const g = e.target.closest?.('.grip');
+  if (!g || drag) return; // one finger at a time
+  const li = g.closest('.sortable'), rows = [...li.parentElement.children];
+  const rects = rows.map(r => r.getBoundingClientRect()), from = rows.indexOf(li);
+  // Rows differ in height (long names wrap): neighbours move by the dragged row's height plus the gap.
+  const gap = rows.length > 1 ? rects[1].top - rects[0].bottom : 0;
+  drag = { li, rows, mids: rects.map(r => (r.top + r.bottom) / 2), shift: rects[from].height + gap, from, to: from, y: e.clientY, id: e.pointerId };
+  g.setPointerCapture(e.pointerId);
+  li.classList.add('lifted');
+});
+document.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const { li, rows, mids, shift, from } = drag, dy = e.clientY - drag.y, centre = mids[from] + dy;
+  // The new slot: how many other rows' midpoints the dragged row's centre has passed.
+  drag.to = from + mids.filter((m, i) => i > from && centre > m).length - mids.filter((m, i) => i < from && centre < m).length;
+  li.style.transform = `translateY(${dy}px)`;
+  rows.forEach((r, i) => {
+    if (r === li) return;
+    const s = i > from && i <= drag.to ? -shift : i < from && i >= drag.to ? shift : 0;
+    r.style.transform = s ? `translateY(${s}px)` : '';
+  });
+});
+const drop = e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const { li, to } = drag;
+  drag = null;
+  // Measure where the rows are drawn now, then let glide settle them into the new order.
+  glide('.sortable', 'h', () => {
+    if (e.type === 'pointercancel' || !moveHabit(li.dataset.h, to)) li.parentElement.querySelectorAll('.sortable').forEach(r => { r.style.transform = ''; r.classList.remove('lifted'); });
+    else render();
+  });
+};
+document.addEventListener('pointerup', drop);
+document.addEventListener('pointercancel', drop);
+
 ui.closed ??= { checkin: !!ui.checkinClosed };
 
 export const secActions = kind => {
@@ -41,9 +106,13 @@ export function viewHoy() {
   const due = pendingFirst(state.habits.filter(h => dueOn(h, now)));
   const rest = pendingFirst(state.habits.filter(h => !dueOn(h, now)));
   const doneToday = due.filter(h => setOf(h).has(key)).length;
-  const item = (h, i) => {
-    if (editMode === 'habits') return `<li><button class="habit panel editing" data-act="edit" data-h="${h.id}">
+  const editItem = h => `<li class="sortable" data-h="${h.id}">
+    <button class="grip" data-h="${h.id}" aria-label="Mover ${esc(h.name)}. Flechas arriba y abajo para cambiar su lugar"></button>
+    <button class="habit panel editing" data-act="edit" data-h="${h.id}">
       <i class="sw t${h.tone}"></i><span class="hname">${esc(h.name)}</span><span class="hmeta">${freqLabel(h.freq)}</span><span class="link">Editar</span></button></li>`;
+  if (editMode === 'habits') return top + backupNote(now) + fold('habits', 'Hábitos', 'Arrastra para ordenar', secActions('habits'), `
+    <ul class="habits sortlist">${state.habits.map(editItem).join('')}</ul>`) + checkIn(key) + metricsSec + bottom;
+  const item = (h, i) => {
     const on = setOf(h).has(key);
     const { cur, best } = info(h);
     const weekly = h.freq.type === 'weekly';
@@ -54,12 +123,7 @@ export function viewHoy() {
       <i class="sw dot t${h.tone}" aria-hidden="true"></i>
     </button></li>`;
   };
-  const daysSince = state.lastBackup ? Math.floor((now - new Date(state.lastBackup)) / 864e5) : null;
-  const backupNote = daysSince === null || daysSince >= 7
-    ? `<button class="note" data-act="export">${daysSince === null ? 'Aún no tienes respaldo.' : `Último respaldo hace ${daysSince} días.`} Exportar ahora</button>`
-    : '';
-
-  return top + backupNote + fold('habits', 'Hábitos', `${doneToday} de ${due.length} hechos`, secActions('habits'), `
+  return top + backupNote(now) + fold('habits', 'Hábitos', `${doneToday} de ${due.length} hechos`, secActions('habits'), `
     <ul class="habits">${due.map(item).join('')}</ul>
     ${rest.length ? `<h3 class="sub-sm">Hoy no toca</h3><ul class="habits rest">${rest.map(item).join('')}</ul>` : ''}`) + `
   ${checkIn(key)}
